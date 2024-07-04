@@ -43,7 +43,8 @@ class RetrieveStockData:
         return pd.DataFrame(self.recent_key_metrics)
 
     def _retrieve_recent_metrics(self):
-        self.recent_key_metrics = {'market_cap': f"""{self.stock.info.get('marketCap'):,}""",  # add commas for each k.
+        self.recent_key_metrics = {'market_cap_string': f"""{self.stock.info.get('marketCap'):,}""",  # add commas for each k.
+                                   'market_cap': self.stock.info.get("marketCap"),
                                    'price_eps_ratio': round(self.stock.info.get('trailingPE'), 2),
                                    'price_to_book': round(self.stock.info.get('priceToBook'), 2),
                                    'return_on_equity': round(self.stock.info.get("returnOnEquity"), 2),
