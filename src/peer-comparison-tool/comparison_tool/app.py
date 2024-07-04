@@ -8,13 +8,21 @@ import pandas as pd
 
 def create_app(data: pd.DataFrame):
     # Initialize the Dash app
-    app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+    app = dash.Dash(__name__, external_stylesheets=[dbc.themes.CYBORG])
+
+    # Define your color scheme
+    colors = {
+        'background': '#2c2c54',
+        'text': '#f5f6fa',
+        'chart1': '#74b9ff',
+        'chart2': '#55efc4'
+    }
 
     # Layout of the app
     app.layout = dbc.Container([
-        dbc.Row(dbc.Col(html.H1("Stock Peer Comparison Tool"), className="mb-4")),
+        dbc.Row(dbc.Col(html.H1("Stock Peer Comparison Tool", style={'color': colors['text']}), className="mb-4")),
 
-        dbc.Row(dbc.Col(html.H2("Key Metrics Table"))),
+        dbc.Row(dbc.Col(html.H2("Key Metrics Table", style={'color': colors['text']}))),
         dbc.Row(dbc.Col(dash_table.DataTable(
             columns=[{"name": i, "id": i} for i in data.columns],
             data=data.sample(5).to_dict('records'),
@@ -26,26 +34,43 @@ def create_app(data: pd.DataFrame):
                 dbc.Card([
                     dbc.CardHeader(html.H3("Charts")),
                     dbc.CardBody([
-                        html.P("Select sectors to filter data:"),
+                        html.Label("Select Sectors:", style={'color': colors['text']}),
                         dcc.Dropdown(
                             id='sector-dropdown',
                             options=[{'label': sector, 'value': sector} for sector in data['sector'].unique()],
+                            value=[],  # Default selection
                             multi=True,
+                            searchable=True,
                             placeholder="Select sectors...",
-                            style={'width': '100%', 'marginBottom': '10px'}
+                            style={'marginBottom': '20px'}
                         ),
-                        dcc.Graph(id='eps-bar-chart', style={'height': '300px'}),
-                        dcc.Graph(id='price-earnings-ratio-chart', style={'height': '300px'}),
-                        # Add more dcc.Graph components for additional charts
+                        dbc.Button("Toggle EPS Chart", id="collapse-eps-button", className="mb-3", color="primary"),
+                        dbc.Button("Toggle P/E Ratio Chart", id="collapse-pe-ratio-button", className="mb-3", color="secondary"),
                     ])
-                ])
+                ], style={'backgroundColor': colors['background']})
+            ], width=12)
+        ]),
+
+        dbc.Row([
+            dbc.Col([
+                dbc.Collapse(
+                    dcc.Graph(id='eps-bar-chart'),
+                    id="collapse-eps",
+                    is_open=False
+                ),
+                dbc.Collapse(
+                    dcc.Graph(id='price-earnings-ratio-chart'),
+                    id="collapse-pe-ratio",
+                    is_open=False
+                )
+                # Add more graphs and plots here if we want
             ], width=12)
         ]),
 
         dbc.Row([
             dbc.Col([
                 dbc.Card([
-                    dbc.CardHeader(html.H3("Radar Chart - Metric Comparison")),
+                    dbc.CardHeader(html.H3("Radar Chart - Metric Comparison", style={'color': colors['text']})),
                     dbc.CardBody([
                         html.Label("Select Companies:"),
                         dcc.Dropdown(
@@ -59,7 +84,7 @@ def create_app(data: pd.DataFrame):
                         ),
                         dcc.Graph(id='radar-chart')
                     ])
-                ])
+                ], style={'backgroundColor': colors['background']})
             ], width=12)
         ])
 
@@ -74,7 +99,49 @@ def create_app(data: pd.DataFrame):
         #     figure=px.bar(data, x='price_eps_ratio', y='ticker', title="P/E Ratio Comparison", orientation='h'),
         #     style={"height": "70vh"}
         # )))
-    ], fluid=True)
+    ], style={'backgroundColor': colors['background']})
+
+    # @app.callback(
+    #     dash.dependencies.Output("collapse-pe-ratio", "is_open"),
+    #     [dash.dependencies.Input("collapse-pe-ratio-button", "n_clicks")],
+    #     [dash.dependencies.State("collapse-pe-ratio", "is_open")],
+    # )
+    # def toggle_price_earnings_ratio_chart_collapse(n, is_open):
+    #     if n:
+    #         return not is_open
+    #     return is_open
+    #
+    # @app.callback(
+    #     dash.dependencies.Output("collapse-eps", "is_open"),
+    #     [dash.dependencies.Input("collapse-eps-button", "n_clicks")],
+    #     [dash.dependencies.State("collapse-eps", "is_open")],
+    # )
+    # def toggle_eps_chart_collapse(n, is_open):
+    #     if n:
+    #         return not is_open
+    #     return is_open
+
+    @app.callback(
+        [dash.dependencies.Output("collapse-eps", "is_open"),
+         dash.dependencies.Output("collapse-pe-ratio", "is_open")],
+        [dash.dependencies.Input("collapse-eps-button", "n_clicks"),
+         dash.dependencies.Input("collapse-pe-ratio-button", "n_clicks")],
+        [dash.dependencies.State("collapse-eps", "is_open"),
+         dash.dependencies.State("collapse-pe-ratio", "is_open")],
+    )
+    def toggle_charts(n_clicks_eps, n_clicks_pe, is_open_eps, is_open_pe):
+        ctx = dash.callback_context
+
+        if not ctx.triggered:
+            return False, False
+
+        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+
+        if button_id == "collapse-eps-button":
+            return not is_open_eps, False
+        elif button_id == "collapse-pe-ratio-button":
+            return False, not is_open_pe
+        return False, False
 
     @app.callback(
         [dash.dependencies.Output('eps-bar-chart', 'figure'),
@@ -92,6 +159,18 @@ def create_app(data: pd.DataFrame):
         # Create bar chart figure
         fig1 = px.bar(filtered_data, x='latest_eps', y='ticker', title="Latest EPS Comparison", orientation='h')
         fig2 = px.bar(filtered_data, x='price_eps_ratio', y='ticker', title="P/E Ratio Comparison", orientation='h')
+
+        # Update figure layout for dark theme
+        fig1.update_layout(
+            plot_bgcolor=colors['background'],
+            paper_bgcolor=colors['background'],
+            font_color=colors['text']
+        )
+        fig2.update_layout(
+            plot_bgcolor=colors['background'],
+            paper_bgcolor=colors['background'],
+            font_color=colors['text']
+        )
 
         return fig1, fig2
 

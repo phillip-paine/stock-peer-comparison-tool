@@ -34,4 +34,5 @@ if __name__ == '__main__':
     df_ticker_id = pd.read_csv(os.path.expanduser('~/Documents/Code/peer-comparison-tool/data/sp500_security_ticker.csv'))
     df_ticker_id = df_ticker_id.sample(n=50)
     tickers = df_ticker_id['Symbol']
+    tickers = ["AAPL", "MSFT", "AMZN", "NVDA", "META"]
     main_run(tickers)
