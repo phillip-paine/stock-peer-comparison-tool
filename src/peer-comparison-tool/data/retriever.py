@@ -42,14 +42,22 @@ class RetrieveStockData:
     def recent_metrics(self):
         return pd.DataFrame(self.recent_key_metrics)
 
+    @staticmethod
+    def safe_round(value, decimals=2):
+        return round(value, decimals) if value is not None else None
+
+    @staticmethod
+    def safe_divide(numerator, denominator):
+        return numerator / denominator if denominator is not None and denominator > 0 else None
+
     def _retrieve_recent_metrics(self):
         self.recent_key_metrics = {'market_cap_string': f"""{self.stock.info.get('marketCap'):,}""",  # add commas for each k.
                                    'market_cap': self.stock.info.get("marketCap"),
-                                   'price_eps_ratio': round(self.stock.info.get('trailingPE'), 2),
-                                   'price_to_book': round(self.stock.info.get('priceToBook'), 2),
-                                   'return_on_equity': round(self.stock.info.get("returnOnEquity"), 2),
-                                   'debt_to_equity_ratio': round(self.stock.info.get("debtToEquity"), 2),
-                                   "EV_EBIDTA": round(self.stock.info.get("enterpriseValue") / self.stock.info.get("ebitda"), 2)
+                                   'price_eps_ratio': self.safe_round(self.stock.info.get('trailingPE'), 2),
+                                   'price_to_book': self.safe_round(self.stock.info.get('priceToBook'), 2),
+                                   'return_on_equity': self.safe_round(self.stock.info.get("returnOnEquity"), 2),
+                                   'debt_to_equity_ratio': self.safe_round(self.stock.info.get("debtToEquity"), 2),
+                                   "EV_EBIDTA": self.safe_round(self.safe_divide(self.stock.info.get("enterpriseValue"), self.stock.info.get("ebitda")), 2)
                                    }
         latest_eps = None
         try:
@@ -58,7 +66,7 @@ class RetrieveStockData:
         except Exception as e:
             pass
         finally:
-            self.recent_key_metrics['latest_eps'] = round(latest_eps, 2)
+            self.recent_key_metrics['latest_eps'] = self.safe_round(latest_eps, 2)
 
     def retrieve_recent_quarterly_financials(self):
         # might want to process these - but it is columns = dates, rows = key metrics

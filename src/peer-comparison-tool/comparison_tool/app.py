@@ -99,7 +99,7 @@ def create_app(data: pd.DataFrame):
         #     figure=px.bar(data, x='price_eps_ratio', y='ticker', title="P/E Ratio Comparison", orientation='h'),
         #     style={"height": "70vh"}
         # )))
-    ], style={'backgroundColor': colors['background']})
+    ], style={'backgroundColor': colors['background'], "height": "100vh", "overflow": "hidden"})
 
     # @app.callback(
     #     dash.dependencies.Output("collapse-pe-ratio", "is_open"),
@@ -208,7 +208,10 @@ def create_app(data: pd.DataFrame):
                     range=[0, 1]
                 )),
             showlegend=True,
-            title='Metric Comparison Radar Chart'
+            title='Metric Comparison Radar Chart',
+            plot_bgcolor=colors['background'],
+            paper_bgcolor=colors['background'],
+            font_color=colors['text']
         )
 
         # fig.update_layout(
