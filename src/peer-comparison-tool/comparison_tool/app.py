@@ -197,7 +197,7 @@ def create_app(data: pd.DataFrame):
         [dash.dependencies.State("collapse-eps", "is_open"),
          dash.dependencies.State("collapse-pe-ratio", "is_open")],
     )
-    def toggle_charts(n_clicks_eps, n_clicks_pe, n_clicks_sc, is_open_eps, is_open_pe, is_open_sc):
+    def toggle_charts(n_clicks_eps, n_clicks_pe, is_open_eps, is_open_pe):
         ctx = dash.callback_context
 
         if not ctx.triggered:
@@ -233,7 +233,7 @@ def create_app(data: pd.DataFrame):
         fig1 = px.bar(filtered_data, x='latest_eps', y='ticker', title="Latest EPS Comparison", orientation='h')
         fig2 = px.bar(filtered_data, x='price_eps_ratio', y='ticker', title="P/E Ratio Comparison", orientation='h')
         fig3 = px.scatter(filtered_data, x='latest_eps', y='price_eps_ratio', text='ticker',
-                          hover_data={'market_cap': True, 'price_to_book': True, 'ebitda': True},
+                          hover_data={'market_cap': True, 'price_to_book': True, 'EV_EBIDTA': True},
                           title="EPS vs. P/E Ratio Scatter Chart")
 
         # Update figure layout for dark theme
@@ -253,8 +253,12 @@ def create_app(data: pd.DataFrame):
             plot_bgcolor=colors['background'],
             paper_bgcolor=colors['background'],
             font_color=colors['text'],
-            margin=dict(l=20, r=20, t=30, b=20)
+            margin=dict(l=20, r=20, t=30, b=20),
+            xaxis=dict(range=[0, max(filtered_data['latest_eps']) * 1.1]),
+            yaxis=dict(range=[0, max(filtered_data['price_eps_ratio']) * 1.1])
         )
+
+        fig3.update_traces(marker=dict(color='red', size=10, line=dict(width=2, color='DarkSlateGrey')), selector=dict(mode='markers+text'))
 
         return table_data, fig1, fig2, fig3
 
