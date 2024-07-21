@@ -48,10 +48,14 @@ class RetrieveStockData:
 
     @staticmethod
     def safe_divide(numerator, denominator):
-        return numerator / denominator if denominator is not None and denominator > 0 else None
+        return numerator / denominator if denominator is not None and numerator is not None and denominator > 0 else None
+
+    @staticmethod
+    def safe_string_format(value):
+        return f"""{value:,}""" if value is not None else None
 
     def _retrieve_recent_metrics(self):
-        self.recent_key_metrics = {'market_cap_string': f"""{self.stock.info.get('marketCap'):,}""",  # add commas for each k.
+        self.recent_key_metrics = {'market_cap_string': self.safe_string_format(self.stock.info.get('marketCap')),  # add commas for each k.
                                    'market_cap': self.stock.info.get("marketCap"),
                                    'price_eps_ratio': self.safe_round(self.stock.info.get('trailingPE'), 2),
                                    'price_to_book': self.safe_round(self.stock.info.get('priceToBook'), 2),
