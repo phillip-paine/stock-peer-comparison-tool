@@ -12,8 +12,9 @@ DISPLAY_COLS = ['name', 'sector', 'price_eps_ratio', 'market_cap_string', 'EV_EB
 
 def get_comparison_page_layout(data: pd.DataFrame):
     return dbc.Container([
-        dbc.Row([dbc.Col(html.H1("Stock Peer Comparison Tool", style={'color': colors['text'], 'textAlign': 'center'}), className="mb-4"),
-                 dbc.Button("Return to Home", id="back-to-home", color="primary", className="mb-3")]),
+        dbc.Row([dbc.Col(html.H1("Stock Peer Comparison Tool", style={'color': colors['text'], 'textAlign': 'center'}), width=10, className="mb-4"),
+                 dbc.Col(dbc.Button("Return to Home", id="back-to-home", color="primary", className="mb-3"), width=2)
+                 ], align='center'),
 
         dbc.Row(
             dbc.Col([

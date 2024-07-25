@@ -7,11 +7,11 @@ import dash_bootstrap_components as dbc
 # from .layout import create_container
 from .landing_page import get_landing_page_layout
 from .comparison_page import get_comparison_page_layout, register_comparison_callbacks
-from .company_financials_temporal_view import get_financial_time_series_page_layout
+from .company_financials_temporal_view import get_financial_time_series_page_layout, register_time_series_callbacks
 from .styles import colors
 
 
-def create_app(data: pd.DataFrame):
+def create_app(data: pd.DataFrame, qfin_data: pd.DataFrame):
 
     # Initialize the Dash app
     app = dash.Dash(__name__, external_stylesheets=[dbc.themes.CYBORG],suppress_callback_exceptions=True)
@@ -29,7 +29,7 @@ def create_app(data: pd.DataFrame):
         if pathname == '/comparison':
             return get_comparison_page_layout(data)
         elif pathname == '/financial-time-series':
-            return get_financial_time_series_page_layout(data)
+            return get_financial_time_series_page_layout(qfin_data)
         else:
             return get_landing_page_layout()
 
@@ -53,6 +53,7 @@ def create_app(data: pd.DataFrame):
             return '/'
 
     register_comparison_callbacks(app, data)
+    register_time_series_callbacks(app, qfin_data)
 
     # Callback to handle the "Return to Home" button click
     @app.callback(

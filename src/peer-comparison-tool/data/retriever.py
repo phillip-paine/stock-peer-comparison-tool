@@ -1,6 +1,7 @@
 """Class to retrieve and process the finance data gathered from the API"""
 
 import pandas as pd
+import numpy as np
 import yfinance as yf
 import os
 
@@ -10,6 +11,7 @@ class RetrieveStockData:
     def __init__(self, stock_ticker: str):
         self._df_quarterly = None
         self._df_balance_sheet = None
+        self._df_stock_history = None
         self.stock_info = None
         self.stock_info_key = None
         self.recent_key_metrics = None
@@ -18,17 +20,19 @@ class RetrieveStockData:
         self.stock_ticker = stock_ticker  # Tickers if we want to look at multiple stock tickers at once
         self.stock = yf.Ticker(self.stock_ticker)
         self.retrieve_balance_sheet()
-        self.retrieve_recent_quarterly_financials()
         self.retrieve_stock_info()
         self._retrieve_recent_metrics()
 
     @property
     def quarterly_finances(self):
+        if self._df_quarterly is None:
+            self.retrieve_recent_quarterly_financials()
+
         return self._df_quarterly
 
     @property
     def most_recent_quarterly_finances(self):
-        return self._df_quarterly[self._df_quarterly.iloc[:, [0]]]
+        return self.quarterly_finances[self.quarterly_finances.iloc[:, [0]]]
 
     @property
     def balance_sheets(self):
@@ -42,6 +46,10 @@ class RetrieveStockData:
     def recent_metrics(self):
         return pd.DataFrame(self.recent_key_metrics)
 
+    @property
+    def stock_overview_map(self):
+        return self._stock_overview_map()
+
     @staticmethod
     def safe_round(value, decimals=2):
         return round(value, decimals) if value is not None else None
@@ -53,6 +61,9 @@ class RetrieveStockData:
     @staticmethod
     def safe_string_format(value):
         return f"""{value:,}""" if value is not None else None
+
+    def fetch_time_series_data(self):
+        self._df_stock_history = self.stock.history(period="2y")
 
     def _retrieve_recent_metrics(self):
         self.recent_key_metrics = {'market_cap_string': self.safe_string_format(self.stock.info.get('marketCap')),  # add commas for each k.
@@ -76,6 +87,17 @@ class RetrieveStockData:
         # might want to process these - but it is columns = dates, rows = key metrics
         self._df_quarterly = self.stock.quarterly_financials
 
+    def get_quarterly_financials_app_data(self):
+        qfin_columns = ['Basic EPS', 'Operating Income', 'Total Revenue', 'Gross Profit']
+        df = self.quarterly_finances.loc[qfin_columns]
+        df.fillna(value=0, inplace=True)
+        # transform rows to columns and columns to rows:
+        df = df.transpose()
+        df['Gross Margin'] = np.where(df['Total Revenue'] > 0, df['Gross Profit'] / df['Total Revenue'] * 100, 0)
+        df.drop(columns=['Total Revenue', 'Gross Profit'], inplace=True)
+        # todo standardise the dates into year-quarter because they are not always the same date here
+        return df
+
     def retrieve_balance_sheet(self):
         # annual - can be fairly out of date:
         self._df_balance_sheet = self.stock.get_balance_sheet()
@@ -87,14 +109,18 @@ class RetrieveStockData:
             'sector': self.stock_info.get('sector'),
         }
 
-    def stock_overview_metrics(self):
+    def _stock_overview_map(self):
         stock_overview_map = {
             'ticker': self.stock_ticker,
             'industry': self.stock_info_key.get('industry'),
             'sector': self.stock_info_key.get('sector'),
         }
-        stock_overview_map.update(self.recent_key_metrics)
         return stock_overview_map
+
+    def add_stock_overview_metrics_to_key_metrics(self):
+        stock_key_metrics_info = self._stock_overview_map()
+        stock_key_metrics_info.update(self.recent_key_metrics)
+        return stock_key_metrics_info
 
 
 def write_security_stock_ticker_data() -> None:

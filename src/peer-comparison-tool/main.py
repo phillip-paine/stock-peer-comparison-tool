@@ -12,8 +12,8 @@ from typing import Optional, Any
 def main_run(tickers: Optional[Any] = None):
     if tickers is None:
         tickers = TICKERS
-    df_ticker_metrics = create_main_data(tickers)
-    app = create_app(df_ticker_metrics)
+    df_ticker_metrics, df_ticker_quarterly_ts = create_main_data(tickers)
+    app = create_app(df_ticker_metrics, df_ticker_quarterly_ts)
     app.run_server(debug=True)
     a=1
 
@@ -25,8 +25,8 @@ def execute_app(tickers):
         tickers = tickers.split(", ")
     else:
         tickers = TICKERS
-    df_ticker_metrics = create_main_data(tickers)
-    app = create_app(df_ticker_metrics)
+    df_ticker_metrics, df_ticker_qfinancials = create_main_data(tickers)
+    app = create_app(df_ticker_metrics, df_ticker_qfinancials)
     app.run_server(debug=True)
 
 
