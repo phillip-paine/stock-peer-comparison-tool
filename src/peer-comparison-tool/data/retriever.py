@@ -90,7 +90,8 @@ class RetrieveStockData:
     def get_quarterly_financials_app_data(self):
         qfin_columns = ['Basic EPS', 'Operating Income', 'Total Revenue', 'Gross Profit']
         df = self.quarterly_finances.loc[qfin_columns]
-        df.fillna(value=0, inplace=True)
+        df = df.astype(float)
+        df.fillna(value=0.0, inplace=True)
         # transform rows to columns and columns to rows:
         df = df.transpose()
         df['Gross Margin'] = np.where(df['Total Revenue'] > 0, df['Gross Profit'] / df['Total Revenue'] * 100, 0)
@@ -101,6 +102,23 @@ class RetrieveStockData:
     def retrieve_balance_sheet(self):
         # annual - can be fairly out of date:
         self._df_balance_sheet = self.stock.get_balance_sheet()
+
+    def get_balance_sheet_app_data(self):
+        df = self.balance_sheets
+        df = df.astype(float)
+        df.fillna(value=0.0, inplace=True)
+        df = df.transpose()
+        bs_cols = ['OrdinarySharesNumber', 'StockholdersEquity', 'TotalLiabilitiesNetMinorityInterest', 'CurrentAssets']
+        df = df[bs_cols].copy()
+        # processing and creating new insight columns:
+        if 'Inventory' in df.columns:
+            df['Quick Ratio'] = (df['CurrentAssets'] - df['Inventory']) / df['TotalLiabilitiesNetMinorityInterest']
+        else:
+            df['Quick Ratio'] = df['CurrentAssets'] / df['TotalLiabilitiesNetMinorityInterest']
+
+        df['Equity Ratio'] = (df['CurrentAssets'] - df['TotalLiabilitiesNetMinorityInterest']) / df['OrdinarySharesNumber']
+        df['Debt-to-Equity Ratio'] = df['TotalLiabilitiesNetMinorityInterest'] / df['StockholdersEquity']
+        return df
 
     def retrieve_stock_info(self):
         self.stock_info = self.stock.info

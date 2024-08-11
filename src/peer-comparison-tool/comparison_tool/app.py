@@ -7,11 +7,12 @@ import dash_bootstrap_components as dbc
 # from .layout import create_container
 from .landing_page import get_landing_page_layout
 from .comparison_page import get_comparison_page_layout, register_comparison_callbacks
-from .company_financials_temporal_view import get_financial_time_series_page_layout, register_time_series_callbacks
+from .company_quarterly_report import get_quarterly_report_page_layout, register_quarterly_report_page_callbacks
+from .company_balance_sheet_report import get_balance_sheet_report_page_layout, register_balance_sheet_report_page_callbacks
 from .styles import colors
 
 
-def create_app(data: pd.DataFrame, qfin_data: pd.DataFrame):
+def create_app(data: pd.DataFrame, qfin_data: pd.DataFrame, bs_data: pd.DataFrame):
 
     # Initialize the Dash app
     app = dash.Dash(__name__, external_stylesheets=[dbc.themes.CYBORG],suppress_callback_exceptions=True)
@@ -28,16 +29,19 @@ def create_app(data: pd.DataFrame, qfin_data: pd.DataFrame):
     def display_page(pathname):
         if pathname == '/comparison':
             return get_comparison_page_layout(data)
-        elif pathname == '/financial-time-series':
-            return get_financial_time_series_page_layout(qfin_data)
+        elif pathname == '/quarterly-report-ts-data':
+            return get_quarterly_report_page_layout(qfin_data)
+        elif pathname == '/balance-sheet-report-ts-data':
+            return get_balance_sheet_report_page_layout(bs_data)
         else:
             return get_landing_page_layout()
 
     # Callback for navigation buttons
     @app.callback(Output('url', 'pathname'),
                   [Input('comparison-page-button', 'n_clicks'),
-                   Input('financial-time-series-page-button', 'n_clicks')])
-    def navigate(n_clicks_comparison, n_clicks_financial):
+                   Input('quarterly-report-ts-data-page-button', 'n_clicks'),
+                   Input('balance-sheet-report-ts-data-page-button', 'n_clicks')])
+    def navigate(n_clicks_comparison, n_clicks_quarterly, n_clicks_balance_sheet):
         ctx = dash.callback_context
 
         if not ctx.triggered:
@@ -47,13 +51,16 @@ def create_app(data: pd.DataFrame, qfin_data: pd.DataFrame):
 
         if button_id == 'comparison-page-button':
             return '/comparison'
-        elif button_id == 'financial-time-series-page-button':
-            return '/financial-time-series'
+        elif button_id == 'quarterly-report-ts-data-page-button':
+            return '/quarterly-report-ts-data'
+        elif button_id == 'balance-sheet-report-ts-data-page-button':
+            return '/balance-sheet-report-ts-data'
         else:
             return '/'
 
     register_comparison_callbacks(app, data)
-    register_time_series_callbacks(app, qfin_data)
+    register_quarterly_report_page_callbacks(app, qfin_data)
+    register_balance_sheet_report_page_callbacks(app, bs_data)
 
     # Callback to handle the "Return to Home" button click
     @app.callback(

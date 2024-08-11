@@ -18,8 +18,14 @@ def get_landing_page_layout():
                     style={'backgroundColor': colors['primary']}
                 ),
                 dbc.Button(
-                    "Financial Time Series Page",
-                    id="financial-time-series-page-button",
+                    "Quarterly Reports Page",
+                    id="quarterly-report-ts-data-page-button",
+                    color="primary",
+                    style={'backgroundColor': colors['primary']}
+                ),
+                dbc.Button(
+                    "Balance Sheet Reports Page",
+                    id="balance-sheet-report-ts-data-page-button",
                     color="primary",
                     style={'backgroundColor': colors['primary']}
                 )

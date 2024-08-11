@@ -12,8 +12,8 @@ from typing import Optional, Any
 def main_run(tickers: Optional[Any] = None):
     if tickers is None:
         tickers = TICKERS
-    df_ticker_metrics, df_ticker_quarterly_ts = create_main_data(tickers)
-    app = create_app(df_ticker_metrics, df_ticker_quarterly_ts)
+    df_ticker_metrics, df_ticker_quarterly_ts, df_ticker_balance_sheet_ts = create_main_data(tickers)
+    app = create_app(df_ticker_metrics, df_ticker_quarterly_ts, df_ticker_balance_sheet_ts)
     app.run_server(debug=True)
     a=1
 

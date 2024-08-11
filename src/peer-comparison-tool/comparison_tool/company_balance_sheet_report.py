@@ -5,17 +5,12 @@ import plotly.express as px
 import plotly.graph_objects as go
 from .styles import colors
 
-import pandas as pd
 
-from .layout import create_container, create_header
-
-
-# Function to get the layout for the Financial Time Series Page
-def get_financial_time_series_page_layout(data):
+def get_balance_sheet_report_page_layout(data):
     return dbc.Container([
         dbc.Row([
             dbc.Col(
-                html.H1("Stock Financials Over Time", style={'color': colors['text'], 'textAlign': 'center'}), width=10,
+                html.H1("Company Balance Sheet Report Time Series", style={'color': colors['text'], 'textAlign': 'center'}), width=10,
                 className="mb-4"),
             dbc.Col(dbc.Button("Return to Home", id="back-to-home", color="primary", className="mb-3"), width=2)
         ], align='center'
@@ -39,11 +34,11 @@ def get_financial_time_series_page_layout(data):
                 dcc.Dropdown(
                     id='metric-dropdown',
                     options=[
-                        {'label': 'Gross Margin', 'value': 'Gross Margin'},
-                        {'label': 'Operating Income', 'value': 'Operating Income'},
-                        {'label': 'EPS', 'value': 'Basic EPS'}
+                        {'label': 'Quick Ratio', 'value': 'Quick Ratio'},
+                        {'label': 'Equity Ratio', 'value': 'Equity Ratio'},
+                        {'label': 'Debt-to-Equity Ratio', 'value': 'Debt-to-Equity Ratio'}
                     ],
-                    value='Gross Margin',
+                    value='Quick Ratio',
                     multi=False,
                     searchable=True,
                     placeholder="Select a metric...",
@@ -52,15 +47,15 @@ def get_financial_time_series_page_layout(data):
             ], width=6),
         ]),
         dbc.Row([
-            dbc.Col(dcc.Graph(id='time-series-chart', config={'displayModeBar': False}), width=12)
+            dbc.Col(dcc.Graph(id='bs-time-series-chart', config={'displayModeBar': False}), width=12)
         ])
 
     ], fluid=True, style={'backgroundColor': colors['background']})
 
 
-def register_time_series_callbacks(app, data):
+def register_balance_sheet_report_page_callbacks(app, data):
     @app.callback(
-        dash.dependencies.Output('time-series-chart', 'figure'),
+        dash.dependencies.Output('bs-time-series-chart', 'figure'),
         [dash.dependencies.Input('sector-dropdown', 'value'),
          dash.dependencies.Input('metric-dropdown', 'value')]
     )
@@ -76,10 +71,13 @@ def register_time_series_callbacks(app, data):
             # Filter data based on selected sectors
             filtered_data = data[data['sector'].isin(selected_sectors)]
 
+        filtered_data.sort_values(by=['date'], inplace=True)
+
         # Create time series plot
         fig = px.line(filtered_data, x='date', y=selected_metric, color='ticker',
                       title=f"{selected_metric} over Time",
-                      labels={'date': 'Quarter', selected_metric: selected_metric},
+                      labels={'date': 'Year', selected_metric: selected_metric},
+                      hover_data={data_col: True for data_col in data.columns if data_col not in['date']},
                       markers=True)
 
         fig.update_layout(
