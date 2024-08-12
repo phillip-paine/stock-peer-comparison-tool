@@ -6,6 +6,11 @@ import yfinance as yf
 import os
 
 
+class DataRetrievalError(Exception):
+    """Custom exception for data retrieval failures."""
+    pass
+
+
 class RetrieveStockData:
     # Retrieve one stock ticker (info, history etc.) and create a small number of keys metrics with latest yfinance dat
     def __init__(self, stock_ticker: str):
@@ -17,11 +22,20 @@ class RetrieveStockData:
         self.recent_key_metrics = None
 
         self.data_store = {}
+        self.qfin_columns = ['Basic EPS', 'Operating Income', 'Total Revenue', 'Gross Profit']
         self.stock_ticker = stock_ticker  # Tickers if we want to look at multiple stock tickers at once
         self.stock = yf.Ticker(self.stock_ticker)
-        self.retrieve_balance_sheet()
+        self.stock_check_then_retrieve_data()
         self.retrieve_stock_info()
         self._retrieve_recent_metrics()
+
+    def stock_check_then_retrieve_data(self):
+        try:
+            self.retrieve_balance_sheet()
+            self.retrieve_recent_quarterly_financials()
+
+        except DataRetrievalError as e:
+            print(f"Error {e}")
 
     @property
     def quarterly_finances(self):
@@ -88,8 +102,11 @@ class RetrieveStockData:
         self._df_quarterly = self.stock.quarterly_financials
 
     def get_quarterly_financials_app_data(self):
-        qfin_columns = ['Basic EPS', 'Operating Income', 'Total Revenue', 'Gross Profit']
-        df = self.quarterly_finances.loc[qfin_columns]
+        try:
+            df = self.quarterly_finances.loc[self.qfin_columns]
+        except KeyError as e:
+            print(f"{e}: No quarterly financial statements for {self.stock_ticker}")
+            return pd.DataFrame()
         df = df.astype(float)
         df.fillna(value=0.0, inplace=True)
         # transform rows to columns and columns to rows:
@@ -109,7 +126,11 @@ class RetrieveStockData:
         df.fillna(value=0.0, inplace=True)
         df = df.transpose()
         bs_cols = ['OrdinarySharesNumber', 'StockholdersEquity', 'TotalLiabilitiesNetMinorityInterest', 'CurrentAssets']
-        df = df[bs_cols].copy()
+        try:
+            df = df[bs_cols].copy()
+        except KeyError as e:
+            print(f"{e}: No balance sheet data for {self.stock_ticker}")
+            return pd.DataFrame()
         # processing and creating new insight columns:
         if 'Inventory' in df.columns:
             df['Quick Ratio'] = (df['CurrentAssets'] - df['Inventory']) / df['TotalLiabilitiesNetMinorityInterest']

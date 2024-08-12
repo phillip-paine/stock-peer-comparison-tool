@@ -2,8 +2,10 @@ import dash
 from dash import html, dash_table, dcc
 import dash_bootstrap_components as dbc
 import plotly.express as px
+import os
 import plotly.graph_objects as go
 from .styles import colors
+from .constants import DOWNLOAD_DIR
 
 import pandas as pd
 
@@ -11,7 +13,7 @@ from .layout import create_container, create_header
 
 
 # Function to get the layout for the Financial Time Series Page
-def get_quarterly_report_page_layout(data):
+def get_quarterly_report_page_layout(data, export_data_map):
     return dbc.Container([
         dbc.Row([
             dbc.Col(
@@ -33,7 +35,7 @@ def get_quarterly_report_page_layout(data):
                     placeholder="Select sectors...",
                     style={'marginBottom': '15px'}
                 )
-            ], width=6),
+            ], width=4),
             dbc.Col([
                 html.Label("Select Metric:", style={'color': colors['text']}),
                 dcc.Dropdown(
@@ -49,7 +51,22 @@ def get_quarterly_report_page_layout(data):
                     placeholder="Select a metric...",
                     style={'marginBottom': '20px'}
                 ),
-            ], width=6),
+            ], width=4),
+            dbc.Col([
+                html.Label(["Select Ticker to Export"], style={'color': colors['text']}),
+                dcc.Dropdown(
+                    id='ticker-export-dropdown',
+                    options=[{'label': ticker, 'value': ticker} for ticker in export_data_map.keys()],
+                    searchable=True,
+                    value=list(export_data_map.keys())[0],  # Set default value
+                    style={'width': '50%'}
+                ),
+            ], width=3),
+            dbc.Col([
+                html.Button('Export Data', id='export-qfin-button', n_clicks=0),
+                dcc.Download(id='download-csv'),
+                html.Div(id='display-data')
+            ], width=1),
         ]),
         dbc.Row([
             dbc.Col(dcc.Graph(id='time-series-chart', config={'displayModeBar': False}), width=12)
@@ -58,7 +75,7 @@ def get_quarterly_report_page_layout(data):
     ], fluid=True, style={'backgroundColor': colors['background']})
 
 
-def register_quarterly_report_page_callbacks(app, data):
+def register_quarterly_report_page_callbacks(app, data, qfin_map):
     @app.callback(
         dash.dependencies.Output('time-series-chart', 'figure'),
         [dash.dependencies.Input('sector-dropdown', 'value'),
@@ -96,3 +113,29 @@ def register_quarterly_report_page_callbacks(app, data):
         fig.update_traces(marker=dict(size=8), line=dict(width=2))
 
         return fig
+
+    @app.callback(
+        dash.dependencies.Output('download-csv', 'data'),
+        dash.dependencies.Input('export-qfin-button', 'n_clicks'),
+        dash.dependencies.Input('ticker-export-dropdown', 'value'),
+        prevent_initial_call=True
+    )
+    def export_data(n_clicks, selected_ticker):
+        if n_clicks > 0 and selected_ticker:
+            # Get the selected balance sheet DataFrame
+            df = qfin_map[selected_ticker]
+
+            # Convert the DataFrame to a CSV string
+            csv_string = df.to_csv(index=False)
+
+            # Return the data for download
+            filename = f"{selected_ticker}_historical_10Q_quarterly_reports_{most_recent_report_date(df)}.csv"
+            filepath = os.path.join(os.path.expanduser(DOWNLOAD_DIR), filename)
+            if os.path.exists(filepath):
+                return dash.no_update
+            else:
+                return dict(content=csv_string, filename=filepath, type='text/csv')
+
+
+def most_recent_report_date(ticker_data):
+    return ticker_data['date'].iloc[-1]

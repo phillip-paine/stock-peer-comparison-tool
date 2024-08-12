@@ -3,6 +3,7 @@ from dash import html, dcc
 import pandas as pd
 from dash.dependencies import Input, Output
 import dash_bootstrap_components as dbc
+from typing import Dict
 
 # from .layout import create_container
 from .landing_page import get_landing_page_layout
@@ -12,7 +13,8 @@ from .company_balance_sheet_report import get_balance_sheet_report_page_layout, 
 from .styles import colors
 
 
-def create_app(data: pd.DataFrame, qfin_data: pd.DataFrame, bs_data: pd.DataFrame):
+def create_app(data: pd.DataFrame, qfin_data: pd.DataFrame, bs_data: pd.DataFrame,
+               qfin_map: Dict[str, pd.DataFrame], bs_map: Dict[str, pd.DataFrame]):
 
     # Initialize the Dash app
     app = dash.Dash(__name__, external_stylesheets=[dbc.themes.CYBORG],suppress_callback_exceptions=True)
@@ -30,9 +32,9 @@ def create_app(data: pd.DataFrame, qfin_data: pd.DataFrame, bs_data: pd.DataFram
         if pathname == '/comparison':
             return get_comparison_page_layout(data)
         elif pathname == '/quarterly-report-ts-data':
-            return get_quarterly_report_page_layout(qfin_data)
+            return get_quarterly_report_page_layout(qfin_data, qfin_map)
         elif pathname == '/balance-sheet-report-ts-data':
-            return get_balance_sheet_report_page_layout(bs_data)
+            return get_balance_sheet_report_page_layout(bs_data, bs_map)
         else:
             return get_landing_page_layout()
 
@@ -59,8 +61,8 @@ def create_app(data: pd.DataFrame, qfin_data: pd.DataFrame, bs_data: pd.DataFram
             return '/'
 
     register_comparison_callbacks(app, data)
-    register_quarterly_report_page_callbacks(app, qfin_data)
-    register_balance_sheet_report_page_callbacks(app, bs_data)
+    register_quarterly_report_page_callbacks(app, qfin_data, qfin_map)
+    register_balance_sheet_report_page_callbacks(app, bs_data, bs_map)
 
     # Callback to handle the "Return to Home" button click
     @app.callback(

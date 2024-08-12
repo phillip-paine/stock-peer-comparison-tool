@@ -2,6 +2,7 @@ import click
 import pandas as pd
 import os
 from dateutil.relativedelta import relativedelta
+from typing import Dict
 
 from .retriever import RetrieveStockData
 from .constants import TICKERS
@@ -17,6 +18,8 @@ def create_main_data(tickers):
     ticker_data_list = []
     df_qfinancials = pd.DataFrame()
     df_balancesheets = pd.DataFrame()
+    qfinancials_map: Dict[str, pd.DataFrame] = {}
+    balancesheets_map: Dict[str, pd.DataFrame] = {}
     for ticker in tickers:
         get_stock_data = RetrieveStockData(ticker)
 
@@ -26,19 +29,31 @@ def create_main_data(tickers):
 
         # Write quarterly financials data:
         df_ticker_qfinancial = get_stock_data.get_quarterly_financials_app_data()
-        add_ticker_metadata(df_ticker_qfinancial, get_stock_data.stock_overview_map)
-        if df_qfinancials.empty:
-            df_qfinancials = df_ticker_qfinancial
+        if df_ticker_qfinancial.empty:
+            pass
         else:
-            df_qfinancials = pd.concat([df_qfinancials, df_ticker_qfinancial])
+            add_ticker_metadata(df_ticker_qfinancial, get_stock_data.stock_overview_map)
+            if df_qfinancials.empty:
+                df_qfinancials = df_ticker_qfinancial
+            else:
+                df_qfinancials = pd.concat([df_qfinancials, df_ticker_qfinancial])
+            df_ticker_complete_qfin = get_stock_data.quarterly_finances
+            df_ticker_complete_qfin = df_ticker_complete_qfin.transpose()
+            qfinancials_map[ticker] = df_ticker_complete_qfin
 
         # Balance Sheets:
         df_ticker_balancesheet = get_stock_data.get_balance_sheet_app_data()
-        add_ticker_metadata(df_ticker_balancesheet, get_stock_data.stock_overview_map)
-        if df_balancesheets.empty:
-            df_balancesheets = df_ticker_balancesheet
+        if df_ticker_balancesheet.empty:
+            pass
         else:
-            df_balancesheets = pd.concat([df_balancesheets, df_ticker_balancesheet])
+            add_ticker_metadata(df_ticker_balancesheet, get_stock_data.stock_overview_map)
+            if df_balancesheets.empty:
+                df_balancesheets = df_ticker_balancesheet
+            else:
+                df_balancesheets = pd.concat([df_balancesheets, df_ticker_balancesheet])
+            df_ticker_complete_bs = get_stock_data.balance_sheets
+            df_ticker_complete_bs = df_ticker_complete_bs.transpose()
+            balancesheets_map[ticker] = df_ticker_complete_bs
 
         # if get_stock_data.stock_info_key is not None:
         #     click.echo(f"Key stock info for {ticker}: {get_stock_data.stock_info_key}")
@@ -55,7 +70,7 @@ def create_main_data(tickers):
     df_ticker_data['market_cap_MM'] = df_ticker_data['market_cap'] / 1_000_000  # in millions
     df_qfinancials['Operating Income (MM)'] = df_qfinancials['Operating Income'] / 1_000_000  # in millions
 
-    return df_ticker_data, df_qfinancials, df_balancesheets
+    return df_ticker_data, df_qfinancials, df_balancesheets, qfinancials_map, balancesheets_map
 
 
 def add_ticker_metadata(df: pd.DataFrame, ticker_metadata):
