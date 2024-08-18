@@ -1,12 +1,11 @@
 import click
 import pandas as pd
 import os
-from dateutil.relativedelta import relativedelta
 from typing import Dict
 
 from .retriever import RetrieveStockData
 from .constants import TICKERS
-from .utils import apply_dbscan
+from .utils import create_valuation_clusters
 
 
 def main(tickers):
@@ -72,10 +71,8 @@ def create_main_data(tickers):
     df_qfinancials['Operating Income (MM)'] = df_qfinancials['Operating Income'] / 1_000_000  # in millions
 
     # clustering for scatter chart:
-    df_ticker_data = apply_dbscan(df=df_ticker_data,
-                                  cols=["price_eps_ratio", "latest_eps", "return_on_equity", "EV_EBIDTA", "market_cap_MM"],
-                                  eps=0.5,
-                                  min_samples=3)
+    cluster_cols=["price_eps_ratio", "latest_eps", "return_on_equity", "EV_EBIDTA", "market_cap_MM"]
+    df_ticker_data = create_valuation_clusters(df=df_ticker_data, cols=cluster_cols, eps=0.5, min_samples=3)
 
     return df_ticker_data, df_qfinancials, df_balancesheets, qfinancials_map, balancesheets_map
 

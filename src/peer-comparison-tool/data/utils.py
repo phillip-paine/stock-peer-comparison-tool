@@ -3,6 +3,17 @@ from sklearn.cluster import DBSCAN
 import numpy as np
 from typing import List
 
+DEFAULT_COLOUR = 'red'
+
+
+def create_valuation_clusters(df: pd.DataFrame, cols: List[str], eps: float=0.25, min_samples: int=4):
+    df_clusters = df.dropna(subset=['ticker'] + cols, how='any').copy()
+    df_clusters = apply_dbscan(df_clusters, cols, eps, min_samples)
+    # add in any missing data companies with the default cluster:
+    df = pd.merge(df, df_clusters[['ticker', 'color']], on=['ticker'], how='left')
+    df['color'] = df['color'].fillna(value=DEFAULT_COLOUR)
+    return df
+
 
 def apply_dbscan(df: pd.DataFrame, cols: List[str], eps: float = 0.25, min_samples: int = 4):
     """
@@ -24,5 +35,5 @@ def apply_dbscan(df: pd.DataFrame, cols: List[str], eps: float = 0.25, min_sampl
 
     df['cluster'] = dbscan.fit_predict(X=np.column_stack(array_list))
     # set red as outlier:
-    df['color'] = df['cluster'].apply(lambda row: 'green' if row != -1 else 'red')
+    df['color'] = df['cluster'].apply(lambda row: 'green' if row != -1 else DEFAULT_COLOUR)
     return df
