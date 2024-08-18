@@ -22,7 +22,7 @@ class RetrieveStockData:
         self.recent_key_metrics = None
 
         self.data_store = {}
-        self.qfin_columns = ['Basic EPS', 'Operating Income', 'Total Revenue', 'Gross Profit']
+        self.qfin_columns = ['Basic EPS', 'Operating Income', 'Total Revenue', 'Gross Profit', 'Net Income', 'EBITDA']
         self.stock_ticker = stock_ticker  # Tickers if we want to look at multiple stock tickers at once
         self.stock = yf.Ticker(self.stock_ticker)
         self.stock_check_then_retrieve_data()
@@ -112,7 +112,10 @@ class RetrieveStockData:
         # transform rows to columns and columns to rows:
         df = df.transpose()
         df['Gross Margin'] = np.where(df['Total Revenue'] > 0, df['Gross Profit'] / df['Total Revenue'] * 100, 0)
-        df.drop(columns=['Total Revenue', 'Gross Profit'], inplace=True)
+        df['Operating Margin'] = np.where(df['Total Revenue'] > 0, df['Operating Income'] / df['Total Revenue'] * 100, 0)
+        df['Net Margin'] = np.where(df['Total Revenue'] > 0, df['Net Income'] / df['Total Revenue'] * 100, 0)
+        df['EBITDA Margin'] = np.where(df['Total Revenue'] > 0, df['EBITDA'] / df['Total Revenue'] * 100, 0)
+        df.drop(columns=['Total Revenue', 'Gross Profit', 'EBITDA'], inplace=True)
         # todo standardise the dates into year-quarter because they are not always the same date here
         return df
 

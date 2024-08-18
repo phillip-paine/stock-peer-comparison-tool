@@ -54,7 +54,7 @@ def get_balance_sheet_report_page_layout(data, export_data_map):
                     options=[{'label': ticker, 'value': ticker} for ticker in export_data_map.keys()],
                     searchable=True,
                     value=list(export_data_map.keys())[0],  # Set default value
-                    style={'width': '50%'}
+                    style={'width': '80%'}
                 ),
             ], width=3),
             dbc.Col([

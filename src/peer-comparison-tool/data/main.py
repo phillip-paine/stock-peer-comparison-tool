@@ -6,6 +6,7 @@ from typing import Dict
 
 from .retriever import RetrieveStockData
 from .constants import TICKERS
+from .utils import apply_dbscan
 
 
 def main(tickers):
@@ -69,6 +70,12 @@ def create_main_data(tickers):
     df_balancesheets['date'] = df_balancesheets['date_moved'].dt.year.astype(str)
     df_ticker_data['market_cap_MM'] = df_ticker_data['market_cap'] / 1_000_000  # in millions
     df_qfinancials['Operating Income (MM)'] = df_qfinancials['Operating Income'] / 1_000_000  # in millions
+
+    # clustering for scatter chart:
+    df_ticker_data = apply_dbscan(df=df_ticker_data,
+                                  cols=["price_eps_ratio", "latest_eps", "return_on_equity", "EV_EBIDTA", "market_cap_MM"],
+                                  eps=0.5,
+                                  min_samples=3)
 
     return df_ticker_data, df_qfinancials, df_balancesheets, qfinancials_map, balancesheets_map
 

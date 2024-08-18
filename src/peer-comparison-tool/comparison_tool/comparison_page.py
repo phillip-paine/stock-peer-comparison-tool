@@ -43,6 +43,8 @@ def get_comparison_page_layout(data: pd.DataFrame):
                                     id='metrics-table',
                                     columns=[{"name": i, "id": i} for i in data[DISPLAY_COLS].columns],
                                     data=data.head(5).to_dict('records'),
+                                    sort_action='native',
+                                    sort_mode='multi',
                                     fixed_rows={'headers': True},
                                     style_table={
                                         # 'height': '300px',  # Fixed height of table
@@ -206,8 +208,10 @@ def register_comparison_callbacks(app: dash.Dash, data: pd.DataFrame):
         # Create bar chart figure
         fig1 = px.bar(filtered_data, x='latest_eps', y='ticker', title="Latest EPS Comparison", orientation='h')
         fig2 = px.bar(filtered_data, x='price_eps_ratio', y='ticker', title="P/E Ratio Comparison", orientation='h')
-        fig3 = px.scatter(filtered_data, x='latest_eps', y='price_eps_ratio', text='ticker',
-                          hover_data={'market_cap_MM': True, 'price_to_book': True, 'EV_EBIDTA': True},
+        fig3 = px.scatter(filtered_data, x='latest_eps', y='price_eps_ratio', text='ticker', color="color",
+                          hover_data={'color': False, 'name': True, 'market_cap_MM': True,
+                                      'latest_eps': True, 'price_eps_ratio': True, 'return_on_equity': True,
+                                      'price_to_book': True, 'EV_EBIDTA': True},
                           title="EPS vs. P/E Ratio Scatter Chart")
 
         # Update figure layout for dark theme
@@ -232,7 +236,7 @@ def register_comparison_callbacks(app: dash.Dash, data: pd.DataFrame):
             yaxis=dict(range=[0, max(filtered_data['price_eps_ratio']) * 1.1])
         )
 
-        fig3.update_traces(textposition='bottom center', marker=dict(color='red', size=10, line=dict(width=2, color='DarkSlateGrey')), selector=dict(mode='markers+text'))
+        fig3.update_traces(textposition='bottom center', marker=dict(size=10, line=dict(width=2, color='DarkSlateGrey')), selector=dict(mode='markers+text'))
 
         return table_data, fig1, fig2, fig3
 
