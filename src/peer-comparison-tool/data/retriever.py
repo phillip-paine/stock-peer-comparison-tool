@@ -22,6 +22,7 @@ class RetrieveStockData:
         self.recent_key_metrics = None
 
         self.data_store = {}
+        self.stock_level_data_store = {}
         self.qfin_columns = ['Basic EPS', 'Operating Income', 'Total Revenue', 'Gross Profit', 'Net Income', 'EBITDA']
         self.stock_ticker = stock_ticker  # Tickers if we want to look at multiple stock tickers at once
         self.stock = yf.Ticker(self.stock_ticker)
@@ -143,6 +144,23 @@ class RetrieveStockData:
         df['Equity Ratio'] = (df['CurrentAssets'] - df['TotalLiabilitiesNetMinorityInterest']) / df['OrdinarySharesNumber']
         df['Debt-to-Equity Ratio'] = df['TotalLiabilitiesNetMinorityInterest'] / df['StockholdersEquity']
         return df
+
+    def get_stock_level_data(self):
+        stock_history = self.stock.history(period='1y')
+        stock_history.reset_index(inplace=True)
+        self.stock_level_data_store['stock_price_data'] = stock_history[['Date', 'Close']]
+        self.stock_level_data_store['short_ratio'] = self.stock.info['shortRatio']
+        income_statement = self.stock.income_stmt
+        income_statement_rows = ['Total Revenue', 'Net Income Continuous Operations', 'Basic EPS']
+        income_statement_cols = [c for c in income_statement.columns][:2]
+        for row in income_statement_rows:
+            # dates read left to right:
+            self.stock_level_data_store[f"{row}_yoy"] = round((income_statement.loc[row, income_statement_cols[0]] / income_statement.loc[row, income_statement_cols[1]]) - 1, 2) * 100
+        net_margin_this_year = (income_statement.loc['Total Revenue', income_statement_cols[0]] - income_statement.loc['Total Expenses', income_statement_cols[0]]) / income_statement.loc['Total Expenses', income_statement_cols[0]] * 100
+        net_margin_last_year = (income_statement.loc['Total Revenue', income_statement_cols[1]] - income_statement.loc['Total Expenses', income_statement_cols[1]]) / income_statement.loc['Total Expenses', income_statement_cols[1]] * 100
+        self.stock_level_data_store['net_margin_yoy'] = round(net_margin_this_year / net_margin_last_year - 1, 2) * 100
+        self.stock_level_data_store['stock_price_yoy'] = round(stock_history['Close'].iloc[-1] / stock_history['Close'].iloc[0] - 1, 2) * 100
+        return self.stock_level_data_store
 
     def retrieve_stock_info(self):
         self.stock_info = self.stock.info

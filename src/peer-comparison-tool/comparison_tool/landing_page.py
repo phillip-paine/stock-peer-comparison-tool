@@ -28,6 +28,12 @@ def get_landing_page_layout():
                     id="balance-sheet-report-ts-data-page-button",
                     color="primary",
                     style={'backgroundColor': colors['primary']}
+                ),
+                dbc.Button(
+                    "Company History Overview Page",
+                    id="company-stock-overview-data-page-button",
+                    color="primary",
+                    style={'backgroundColor': colors['primary']}
                 )
             ], className="text-center", style={'marginTop': '20px'})
         ], style={'backgroundColor': colors['background'], 'color': colors['text']})

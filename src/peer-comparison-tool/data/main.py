@@ -1,7 +1,8 @@
 import click
 import pandas as pd
+import numpy as np
 import os
-from typing import Dict
+from typing import Dict, Any
 
 from .retriever import RetrieveStockData
 from .constants import TICKERS
@@ -16,6 +17,7 @@ def main(tickers):
 def create_main_data(tickers):
     df_ticker_id = pd.read_csv(os.path.expanduser('~/Documents/Code/peer-comparison-tool/data/sp500_security_ticker.csv'))
     ticker_data_list = []
+    ticker_data_series_maps: Dict[str, Any] = {}
     df_qfinancials = pd.DataFrame()
     df_balancesheets = pd.DataFrame()
     qfinancials_map: Dict[str, pd.DataFrame] = {}
@@ -55,6 +57,9 @@ def create_main_data(tickers):
             df_ticker_complete_bs = df_ticker_complete_bs.transpose()
             balancesheets_map[ticker] = df_ticker_complete_bs
 
+        # get stock series and year-to-year change data
+        ticker_data_series_maps.update({ticker: get_stock_data.get_stock_level_data()})
+
         # if get_stock_data.stock_info_key is not None:
         #     click.echo(f"Key stock info for {ticker}: {get_stock_data.stock_info_key}")
     df_ticker_data = pd.DataFrame(ticker_data_list)
@@ -74,7 +79,19 @@ def create_main_data(tickers):
     cluster_cols=["price_eps_ratio", "latest_eps", "return_on_equity", "EV_EBIDTA", "market_cap_MM"]
     df_ticker_data = create_valuation_clusters(df=df_ticker_data, cols=cluster_cols, eps=0.5, min_samples=3)
 
-    return df_ticker_data, df_qfinancials, df_balancesheets, qfinancials_map, balancesheets_map
+    # industry average change:
+    def calc_decimal_change(pct):
+        return 1 + pct/100
+
+    num_keys = len(ticker_data_series_maps)
+    ticker_data_series_maps['industry'] = {}
+    for yoy_metric in list(ticker_data_series_maps[tickers.iloc[0]].keys()):
+        if yoy_metric not in ['stock_price_data']:
+            ticker_data_series_maps['industry'].update({
+                f"{yoy_metric}": round((np.prod([calc_decimal_change(ticker_data_series_maps[tcker][yoy_metric]) for tcker in tickers]) ** (1/num_keys) - 1), 4) * 100
+            })
+
+    return ticker_data_series_maps, df_ticker_data, df_qfinancials, df_balancesheets, qfinancials_map, balancesheets_map
 
 
 def add_ticker_metadata(df: pd.DataFrame, ticker_metadata):

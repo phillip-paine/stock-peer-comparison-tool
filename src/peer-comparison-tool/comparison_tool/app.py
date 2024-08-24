@@ -3,17 +3,19 @@ from dash import html, dcc
 import pandas as pd
 from dash.dependencies import Input, Output
 import dash_bootstrap_components as dbc
-from typing import Dict
+from typing import Dict, Any
 
 # from .layout import create_container
 from .landing_page import get_landing_page_layout
 from .comparison_page import get_comparison_page_layout, register_comparison_callbacks
 from .company_quarterly_report import get_quarterly_report_page_layout, register_quarterly_report_page_callbacks
 from .company_balance_sheet_report import get_balance_sheet_report_page_layout, register_balance_sheet_report_page_callbacks
+from .individual_company_overview import get_individual_company_overview_page_layout, \
+    register_individual_company_overview_callback
 from .styles import colors
 
 
-def create_app(data: pd.DataFrame, qfin_data: pd.DataFrame, bs_data: pd.DataFrame,
+def create_app(ticker_series_data: Dict[str, Any], data: pd.DataFrame, qfin_data: pd.DataFrame, bs_data: pd.DataFrame,
                qfin_map: Dict[str, pd.DataFrame], bs_map: Dict[str, pd.DataFrame]):
 
     # Initialize the Dash app
@@ -35,6 +37,8 @@ def create_app(data: pd.DataFrame, qfin_data: pd.DataFrame, bs_data: pd.DataFram
             return get_quarterly_report_page_layout(qfin_data, qfin_map)
         elif pathname == '/balance-sheet-report-ts-data':
             return get_balance_sheet_report_page_layout(bs_data, bs_map)
+        elif pathname == '/company-stock-overview-data':
+            return get_individual_company_overview_page_layout(ticker_series_data)
         else:
             return get_landing_page_layout()
 
@@ -42,8 +46,9 @@ def create_app(data: pd.DataFrame, qfin_data: pd.DataFrame, bs_data: pd.DataFram
     @app.callback(Output('url', 'pathname'),
                   [Input('comparison-page-button', 'n_clicks'),
                    Input('quarterly-report-ts-data-page-button', 'n_clicks'),
-                   Input('balance-sheet-report-ts-data-page-button', 'n_clicks')])
-    def navigate(n_clicks_comparison, n_clicks_quarterly, n_clicks_balance_sheet):
+                   Input('balance-sheet-report-ts-data-page-button', 'n_clicks'),
+                   Input('company-stock-overview-data-page-button', 'n_clicks')])
+    def navigate(n_clicks_comparison, n_clicks_quarterly, n_clicks_balance_sheet, n_clicks_company_overview):
         ctx = dash.callback_context
 
         if not ctx.triggered:
@@ -57,12 +62,15 @@ def create_app(data: pd.DataFrame, qfin_data: pd.DataFrame, bs_data: pd.DataFram
             return '/quarterly-report-ts-data'
         elif button_id == 'balance-sheet-report-ts-data-page-button':
             return '/balance-sheet-report-ts-data'
+        elif button_id == 'company-stock-overview-data-page-button':
+            return '/company-stock-overview-data'
         else:
             return '/'
 
     register_comparison_callbacks(app, data)
     register_quarterly_report_page_callbacks(app, qfin_data, qfin_map)
     register_balance_sheet_report_page_callbacks(app, bs_data, bs_map)
+    register_individual_company_overview_callback(app, ticker_series_data)
 
     # Callback to handle the "Return to Home" button click
     @app.callback(
