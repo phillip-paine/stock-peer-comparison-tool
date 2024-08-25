@@ -149,6 +149,11 @@ class RetrieveStockData:
         stock_history = self.stock.history(period='1y')
         stock_history.reset_index(inplace=True)
         self.stock_level_data_store['stock_price_data'] = stock_history[['Date', 'Close']]
+        # Create the normalised stock price data:
+        stock_history_normalised = stock_history[['Date', 'Close']].copy()
+        stock_history_normalised['Close'] = stock_history_normalised['Close'] / stock_history_normalised['Close'].iloc[0] * 100
+        self.stock_level_data_store['stock_price_normalised_data'] = stock_history_normalised
+
         self.stock_level_data_store['short_ratio'] = self.stock.info['shortRatio']
         income_statement = self.stock.income_stmt
         income_statement_rows = ['Total Revenue', 'Net Income Continuous Operations', 'Basic EPS']

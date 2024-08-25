@@ -3,6 +3,7 @@ from dash import html, dash_table, dcc
 import dash_bootstrap_components as dbc
 import plotly.express as px
 import os
+import pandas as pd
 import plotly.graph_objects as go
 from .styles import colors
 from .constants import DOWNLOAD_DIR
@@ -119,7 +120,7 @@ def get_individual_company_overview_page_layout(data):
                     dbc.CardBody([
                         html.Div([
                             html.Span(f"Stock Price: ", style={'font-weight': 'bold'}),
-                            html.Span(f"{data['industry']['stock_price_yoy']}%", style={'color': get_color_and_arrow(data['industry']['stock_price_yoy'])[0]}),
+                            html.Span(f"{data['industry']['stock_price_yoy']:.2f}%", style={'color': get_color_and_arrow(data['industry']['stock_price_yoy'])[0]}),
                             html.Span(get_color_and_arrow(data['industry']['stock_price_yoy'])[1], style={'color': get_color_and_arrow(data['industry']['stock_price_yoy'])[0], 'font-size': '20px'}),
                         ]),
                     ]),
@@ -157,10 +158,11 @@ def register_individual_company_overview_callback(app, data):
         # Filter data by selected sector
         ticker_data = data.get(selected_ticker)
 
-        # Create stock price time series plot todo
-        ts_filtered_data = ticker_data.get('stock_price_data')
-        fig_stockprice = px.line(ts_filtered_data, x='Date', y='Close',
-                                 title=f"{selected_ticker} Stock Price over Time")
+        ts_filtered_data = ticker_data.get('stock_price_normalised_data')
+        ts_industry_data = data.get('industry').get('stock_price_normalised_data')
+        ts_filtered_data = pd.merge(ts_filtered_data, ts_industry_data, on=['Date'])
+        fig_stockprice = px.line(ts_filtered_data, x='Date', y=['Close', 'Industry Close'],
+                                 title=f"{selected_ticker} Normalised Stock Price v. Industry Index Past 12 Months")
 
         fig_stockprice.update_layout(
             plot_bgcolor=colors['background'],
@@ -168,7 +170,7 @@ def register_individual_company_overview_callback(app, data):
             font_color=colors['text'],
             margin=dict(l=20, r=20, t=30, b=20),
             xaxis_title="Date",
-            yaxis_title="Stock Price",
+            yaxis_title="Normalised Stock Price",
         )
 
         # metrics yoy data:

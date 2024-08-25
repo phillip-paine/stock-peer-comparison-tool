@@ -86,9 +86,24 @@ def create_main_data(tickers):
     num_keys = len(ticker_data_series_maps)
     ticker_data_series_maps['industry'] = {}
     for yoy_metric in list(ticker_data_series_maps[tickers.iloc[0]].keys()):
-        if yoy_metric not in ['stock_price_data']:
+        if yoy_metric not in ['stock_price_data', 'stock_price_normalised_data']:
             ticker_data_series_maps['industry'].update({
                 f"{yoy_metric}": round((np.prod([calc_decimal_change(ticker_data_series_maps[tcker][yoy_metric]) for tcker in tickers]) ** (1/num_keys) - 1), 4) * 100
+            })
+        else:
+            # calculate the industry price index and normalise:
+            industry_price_df = ticker_data_series_maps[tickers.iloc[0]][yoy_metric]
+            for ticker in tickers[1:]:
+                df_temp = ticker_data_series_maps[ticker][yoy_metric]
+                df_temp[f'Close_{ticker}'] = df_temp['Close']
+                industry_price_df = pd.merge(industry_price_df,
+                                             df_temp[['Date', f'Close_{ticker}']],
+                                             on=['Date'])
+
+            industry_price_df['Industry Close'] = industry_price_df[[c for c in industry_price_df.columns if c.startswith('Clos')]].sum(axis=1)
+            industry_price_df['Industry Close'] = industry_price_df['Industry Close'] / industry_price_df['Industry Close'].iloc[0] * 100
+            ticker_data_series_maps['industry'].update({
+                yoy_metric: industry_price_df[['Date', 'Industry Close']]
             })
 
     return ticker_data_series_maps, df_ticker_data, df_qfinancials, df_balancesheets, qfinancials_map, balancesheets_map
