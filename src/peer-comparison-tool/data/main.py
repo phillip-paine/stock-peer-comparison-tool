@@ -80,15 +80,15 @@ def create_main_data(tickers):
     df_ticker_data = create_valuation_clusters(df=df_ticker_data, cols=cluster_cols, eps=0.5, min_samples=3)
 
     # industry average change:
-    def calc_decimal_change(pct):
-        return 1 + pct/100
+    # def calc_decimal_change(pct):
+    #     return 1 + pct/100
 
     num_keys = len(ticker_data_series_maps)
     ticker_data_series_maps['industry'] = {}
     for yoy_metric in list(ticker_data_series_maps[tickers.iloc[0]].keys()):
         if yoy_metric not in ['stock_price_data', 'stock_price_normalised_data']:
             ticker_data_series_maps['industry'].update({
-                f"{yoy_metric}": round((np.prod([calc_decimal_change(ticker_data_series_maps[tcker][yoy_metric]) for tcker in tickers]) ** (1/num_keys) - 1), 4) * 100
+                f"{yoy_metric}": np.mean([ticker_data_series_maps[tcker][yoy_metric] for tcker in tickers])
             })
         else:
             # calculate the industry price index and normalise:

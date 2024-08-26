@@ -80,7 +80,7 @@ def get_individual_company_overview_page_layout(data):
                     dbc.CardBody([
                         html.Div([
                             html.Span(f"Revenue: ", style={'font-weight': 'bold'}),
-                            html.Span(f"{data['industry']['Total Revenue_yoy']}%", style={'color': get_color_and_arrow(data['industry']['Total Revenue_yoy'])[0]}),
+                            html.Span(f"{data['industry']['Total Revenue_yoy']:.2f}%", style={'color': get_color_and_arrow(data['industry']['Total Revenue_yoy'])[0]}),
                             html.Span(get_color_and_arrow(data['industry']['Total Revenue_yoy'])[1], style={'color': get_color_and_arrow(data['industry']['Total Revenue_yoy'])[0], 'font-size': '20px'}),
                         ]),
                     ]),
@@ -90,19 +90,19 @@ def get_individual_company_overview_page_layout(data):
                     dbc.CardBody([
                         html.Div([
                             html.Span(f"Net Income: ", style={'font-weight': 'bold'}),
-                            html.Span(f"{data['industry']['Net Income Continuous Operations_yoy']}%", style={'color': get_color_and_arrow(data['industry']['Net Income Continuous Operations_yoy'])[0]}),
+                            html.Span(f"{data['industry']['Net Income Continuous Operations_yoy']:.2f}%", style={'color': get_color_and_arrow(data['industry']['Net Income Continuous Operations_yoy'])[0]}),
                             html.Span(get_color_and_arrow(data['industry']['Net Income Continuous Operations_yoy'])[1], style={'color': get_color_and_arrow(data['industry']['Net Income Continuous Operations_yoy'])[0], 'font-size': '20px'}),
-                        ]),
+                        ], style={'margin-bottom': '10px'}),
                     ]),
                 ], style={'background-color': colors['background'], 'margin-bottom': '10px'}),
 
                 dbc.Card([
                     dbc.CardBody([
                         html.Div([
-                            html.Span(f"Basic EPS: ", style={'font-weight': 'bold'}),
-                            html.Span(f"{data['industry']['Basic EPS_yoy']}%", style={'color': get_color_and_arrow(data['industry']['Basic EPS_yoy'])[0]}),
+                            html.Span(f"EPS: ", style={'font-weight': 'bold'}),
+                            html.Span(f"{data['industry']['Basic EPS_yoy']:.2f}%", style={'color': get_color_and_arrow(data['industry']['Basic EPS_yoy'])[0]}),
                             html.Span(get_color_and_arrow(data['industry']['Basic EPS_yoy'])[1], style={'color': get_color_and_arrow(data['industry']['Basic EPS_yoy'])[0], 'font-size': '20px'}),
-                        ]),
+                        ], style={'margin-bottom': '10px'}),
                     ]),
                 ], style={'background-color': colors['background'], 'margin-bottom': '10px'}),
 
@@ -110,9 +110,9 @@ def get_individual_company_overview_page_layout(data):
                     dbc.CardBody([
                         html.Div([
                             html.Span(f"Net Margin: ", style={'font-weight': 'bold'}),
-                            html.Span(f"{data['industry']['net_margin_yoy']}%", style={'color': get_color_and_arrow(data['industry']['net_margin_yoy'])[0]}),
+                            html.Span(f"{data['industry']['net_margin_yoy']:.2f}%", style={'color': get_color_and_arrow(data['industry']['net_margin_yoy'])[0]}),
                             html.Span(get_color_and_arrow(data['industry']['net_margin_yoy'])[1], style={'color': get_color_and_arrow(data['industry']['net_margin_yoy'])[0], 'font-size': '20px'}),
-                        ]),
+                        ], style={'margin-bottom': '10px'}),
                     ]),
                 ], style={'background-color': colors['background'], 'margin-bottom': '10px'}),
 
@@ -122,7 +122,7 @@ def get_individual_company_overview_page_layout(data):
                             html.Span(f"Stock Price: ", style={'font-weight': 'bold'}),
                             html.Span(f"{data['industry']['stock_price_yoy']:.2f}%", style={'color': get_color_and_arrow(data['industry']['stock_price_yoy'])[0]}),
                             html.Span(get_color_and_arrow(data['industry']['stock_price_yoy'])[1], style={'color': get_color_and_arrow(data['industry']['stock_price_yoy'])[0], 'font-size': '20px'}),
-                        ]),
+                        ], style={'margin-bottom': '10px'}),
                     ]),
                 ], style={'background-color': colors['background'], 'margin-bottom': '10px'}),
             ], width=2),

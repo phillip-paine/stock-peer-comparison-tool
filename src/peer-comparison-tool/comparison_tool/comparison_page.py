@@ -8,6 +8,7 @@ from .styles import colors
 import pandas as pd
 
 DISPLAY_COLS = ['name', 'sector', 'price_eps_ratio', 'market_cap_MM', 'EV_EBIDTA', 'latest_eps']
+NOT_METRICS = ['name', 'ticker', 'industry', 'sector', 'subsector', 'label', 'market_cap_string', 'market_cap']
 
 
 def get_comparison_page_layout(data: pd.DataFrame):
@@ -16,7 +17,7 @@ def get_comparison_page_layout(data: pd.DataFrame):
                  dbc.Col(dbc.Button("Return to Home", id="back-to-home", color="primary", className="mb-3"), width=2)
                  ], align='center'),
 
-        dbc.Row(
+        dbc.Row([
             dbc.Col([
                 html.Label("Select Sectors:", style={'color': colors['text']}),
                 dcc.Dropdown(
@@ -25,11 +26,33 @@ def get_comparison_page_layout(data: pd.DataFrame):
                     value=[data['sector'].iloc[0]],  # Default selection - jut pick first sector? or leave blank?
                     multi=True,
                     searchable=True,
-                    placeholder="Select sectors...",
                     style={'marginBottom': '15px'}
                 )
-            ])
-        ),
+            ], width=6),
+            dbc.Col([
+                html.Label("Select Comparison Metric:", style={'color': colors['text']}),
+                dcc.Dropdown(
+                    id='comparison-metric1-dropdown',
+                    options=[{'label': metric1, 'value': metric1} for metric1 in data.columns if metric1 not in NOT_METRICS],
+                    value="latest_eps",  # Default selection
+                    multi=False,
+                    searchable=True,
+                    style={'marginBottom': '15px'}
+                )
+            ], width=3),
+            dbc.Col([
+                html.Label("Select Comparison Metric:", style={'color': colors['text']}),
+                dcc.Dropdown(
+                    id='comparison-metric2-dropdown',
+                    options=[{'label': metric2, 'value': metric2} for metric2 in data.columns if metric2 not in NOT_METRICS],
+                    value="price_eps_ratio",  # Default selection
+                    multi=False,
+                    searchable=True,
+                    placeholder="Select metric...",
+                    style={'marginBottom': '15px'}
+                )
+            ], width=3)
+        ]),
 
         # Data table:
         dbc.Row(
@@ -192,9 +215,11 @@ def register_comparison_callbacks(app: dash.Dash, data: pd.DataFrame):
          dash.dependencies.Output('eps-bar-chart', 'figure'),
          dash.dependencies.Output('price-earnings-ratio-chart', 'figure')],
         dash.dependencies.Output('scatter-info-chart', 'figure'),
-        [dash.dependencies.Input('sector-dropdown', 'value')]
+        [dash.dependencies.Input('sector-dropdown', 'value'),
+         dash.dependencies.Input('comparison-metric1-dropdown', 'value'),
+         dash.dependencies.Input('comparison-metric2-dropdown', 'value')]
     )
-    def update_graph(selected_sectors):
+    def update_graph(selected_sectors, metric_one, metric_two):
         if not selected_sectors:
             # If no sectors selected, show all data
             filtered_data = data
@@ -208,11 +233,11 @@ def register_comparison_callbacks(app: dash.Dash, data: pd.DataFrame):
         # Create bar chart figure
         fig1 = px.bar(filtered_data, x='latest_eps', y='ticker', title="Latest EPS Comparison", orientation='h')
         fig2 = px.bar(filtered_data, x='price_eps_ratio', y='ticker', title="P/E Ratio Comparison", orientation='h')
-        fig3 = px.scatter(filtered_data, x='latest_eps', y='price_eps_ratio', text='ticker', color="color",
-                          hover_data={'color': False, 'name': True, 'market_cap_MM': True,
+        fig3 = px.scatter(filtered_data, x=metric_one, y=metric_two, text='ticker', color="label",
+                          hover_data={'label': False, 'name': True, 'market_cap_MM': True,
                                       'latest_eps': True, 'price_eps_ratio': True, 'return_on_equity': True,
                                       'price_to_book': True, 'EV_EBIDTA': True},
-                          title="EPS vs. P/E Ratio Scatter Chart")
+                          title=f"{metric_one} vs. {metric_two} Scatter Chart with Stock Outlier Labels")
 
         # Update figure layout for dark theme
         fig1.update_layout(
@@ -232,8 +257,8 @@ def register_comparison_callbacks(app: dash.Dash, data: pd.DataFrame):
             paper_bgcolor=colors['background'],
             font_color=colors['text'],
             margin=dict(l=20, r=20, t=30, b=20),
-            xaxis=dict(range=[0, max(filtered_data['latest_eps']) * 1.1]),
-            yaxis=dict(range=[0, max(filtered_data['price_eps_ratio']) * 1.1])
+            xaxis=dict(range=[int(min(filtered_data[metric_one]) * .9), max(filtered_data[metric_one]) * 1.1]),
+            yaxis=dict(range=[int(min(filtered_data[metric_one]) * .9), max(filtered_data[metric_two]) * 1.1])
         )
 
         fig3.update_traces(textposition='bottom center', marker=dict(size=10, line=dict(width=2, color='DarkSlateGrey')), selector=dict(mode='markers+text'))
