@@ -12,8 +12,8 @@ from typing import Optional, Any
 def main_run(tickers: Optional[Any] = None):
     if tickers is None:
         tickers = TICKERS
-    ticker_series_data, df_ticker_metrics, df_ticker_quarterly_ts, df_ticker_balance_sheet_ts, quarterlyfin_map, balancesheet_map = create_main_data(tickers)
-    app = create_app(ticker_series_data, df_ticker_metrics, df_ticker_quarterly_ts, df_ticker_balance_sheet_ts, quarterlyfin_map, balancesheet_map)
+    ticker_series_data, df_ticker_metrics, df_ticker_quarterly_ts, df_ticker_balance_sheet_ts, quarterlyfin_map, balancesheet_map, cashflow_map = create_main_data(tickers)
+    app = create_app(ticker_series_data, df_ticker_metrics, df_ticker_quarterly_ts, df_ticker_balance_sheet_ts, quarterlyfin_map, balancesheet_map, cashflow_map)
     app.run_server(debug=True)
     a=1
 
@@ -34,5 +34,5 @@ if __name__ == '__main__':
     df_ticker_id = pd.read_csv(os.path.expanduser('~/Documents/Code/peer-comparison-tool/data/sp500_security_ticker.csv'))
     df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Utilities"]
     tickers = df_ticker_id['Symbol']
-    # tickers = ["AAPL", "MSFT", "AMZN", "NVDA", "META"]
+    tickers = ["AAPL", "MSFT", "AMZN", "NVDA", "META"]
     main_run(tickers)

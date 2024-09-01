@@ -22,6 +22,7 @@ def create_main_data(tickers):
     df_balancesheets = pd.DataFrame()
     qfinancials_map: Dict[str, pd.DataFrame] = {}
     balancesheets_map: Dict[str, pd.DataFrame] = {}
+    cashflow_map: Dict[str, pd.DataFrame] = {}
     for ticker in tickers:
         get_stock_data = RetrieveStockData(ticker)
 
@@ -57,6 +58,13 @@ def create_main_data(tickers):
             df_ticker_complete_bs = df_ticker_complete_bs.transpose()
             balancesheets_map[ticker] = df_ticker_complete_bs
 
+        # Cash Flow Statement:
+        df_ticker_cashflow = get_stock_data.get_cashflow_data()
+        if df_ticker_cashflow.empty:
+            pass
+        else:
+            cashflow_map[ticker] = df_ticker_cashflow
+
         # get stock series and year-to-year change data
         ticker_data_series_maps.update({ticker: get_stock_data.get_stock_level_data()})
 
@@ -85,14 +93,14 @@ def create_main_data(tickers):
 
     num_keys = len(ticker_data_series_maps)
     ticker_data_series_maps['industry'] = {}
-    for yoy_metric in list(ticker_data_series_maps[tickers.iloc[0]].keys()):
+    for yoy_metric in list(ticker_data_series_maps[tickers[0]].keys()):
         if yoy_metric not in ['stock_price_data', 'stock_price_normalised_data']:
             ticker_data_series_maps['industry'].update({
                 f"{yoy_metric}": np.mean([ticker_data_series_maps[tcker][yoy_metric] for tcker in tickers])
             })
         else:
             # calculate the industry price index and normalise:
-            industry_price_df = ticker_data_series_maps[tickers.iloc[0]][yoy_metric]
+            industry_price_df = ticker_data_series_maps[tickers[0]][yoy_metric]
             for ticker in tickers[1:]:
                 df_temp = ticker_data_series_maps[ticker][yoy_metric]
                 df_temp[f'Close_{ticker}'] = df_temp['Close']
@@ -106,7 +114,7 @@ def create_main_data(tickers):
                 yoy_metric: industry_price_df[['Date', 'Industry Close']]
             })
 
-    return ticker_data_series_maps, df_ticker_data, df_qfinancials, df_balancesheets, qfinancials_map, balancesheets_map
+    return ticker_data_series_maps, df_ticker_data, df_qfinancials, df_balancesheets, qfinancials_map, balancesheets_map, cashflow_map
 
 
 def add_ticker_metadata(df: pd.DataFrame, ticker_metadata):

@@ -34,7 +34,13 @@ def get_landing_page_layout():
                     id="company-stock-overview-data-page-button",
                     color="primary",
                     style={'backgroundColor': colors['primary']}
-                )
+                ),
+                dbc.Button(
+                    "Discounted Cash Flow Evaluation",
+                    id="company-discounted-cashflow-calculation-page-button",
+                    color="primary",
+                    style={'backgroundColor': colors['primary']}
+                ),
             ], className="text-center", style={'marginTop': '20px'})
         ], style={'backgroundColor': colors['background'], 'color': colors['text']})
     ])

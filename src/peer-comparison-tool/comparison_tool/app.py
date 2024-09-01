@@ -8,15 +8,16 @@ from typing import Dict, Any
 # from .layout import create_container
 from .landing_page import get_landing_page_layout
 from .comparison_page import get_comparison_page_layout, register_comparison_callbacks
-from .company_quarterly_report import get_quarterly_report_page_layout, register_quarterly_report_page_callbacks
-from .company_balance_sheet_report import get_balance_sheet_report_page_layout, register_balance_sheet_report_page_callbacks
-from .individual_company_overview import get_individual_company_overview_page_layout, \
+from .company_quarterly_report_page import get_quarterly_report_page_layout, register_quarterly_report_page_callbacks
+from .company_balance_sheet_report_page import get_balance_sheet_report_page_layout, register_balance_sheet_report_page_callbacks
+from .individual_company_overview_page import get_individual_company_overview_page_layout, \
     register_individual_company_overview_callback
+from .discounted_cashflow_model_page import get_discounted_cashflow_model_page_layout, register_discounted_cashflow_model_page_callbacks
 from .styles import colors
 
 
 def create_app(ticker_series_data: Dict[str, Any], data: pd.DataFrame, qfin_data: pd.DataFrame, bs_data: pd.DataFrame,
-               qfin_map: Dict[str, pd.DataFrame], bs_map: Dict[str, pd.DataFrame]):
+               qfin_map: Dict[str, pd.DataFrame], bs_map: Dict[str, pd.DataFrame], cashflow_map: Dict[str, pd.DataFrame]):
 
     # Initialize the Dash app
     app = dash.Dash(__name__, external_stylesheets=[dbc.themes.CYBORG],suppress_callback_exceptions=True)
@@ -26,6 +27,8 @@ def create_app(ticker_series_data: Dict[str, Any], data: pd.DataFrame, qfin_data
         dcc.Location(id='url', refresh=False),
         html.Div(id='page-content', style={'backgroundColor': colors['background']})
     ])
+
+    latest_ev_data = data[['ticker', 'enterprise_value']]
 
     # Callback to update the page content based on URL
     @app.callback(Output('page-content', 'children'),
@@ -39,6 +42,8 @@ def create_app(ticker_series_data: Dict[str, Any], data: pd.DataFrame, qfin_data
             return get_balance_sheet_report_page_layout(bs_data, bs_map)
         elif pathname == '/company-stock-overview-data':
             return get_individual_company_overview_page_layout(ticker_series_data)
+        elif pathname == '/company-discounted-cashflow-calculation':
+            return get_discounted_cashflow_model_page_layout(cashflow_map, latest_ev_data)
         else:
             return get_landing_page_layout()
 
@@ -47,8 +52,9 @@ def create_app(ticker_series_data: Dict[str, Any], data: pd.DataFrame, qfin_data
                   [Input('comparison-page-button', 'n_clicks'),
                    Input('quarterly-report-ts-data-page-button', 'n_clicks'),
                    Input('balance-sheet-report-ts-data-page-button', 'n_clicks'),
-                   Input('company-stock-overview-data-page-button', 'n_clicks')])
-    def navigate(n_clicks_comparison, n_clicks_quarterly, n_clicks_balance_sheet, n_clicks_company_overview):
+                   Input('company-stock-overview-data-page-button', 'n_clicks'),
+                   Input('company-discounted-cashflow-calculation-page-button', 'n_clicks')])
+    def navigate(n_clicks_comparison, n_clicks_quarterly, n_clicks_balance_sheet, n_clicks_company_overview, n_clicks_company_dcf):
         ctx = dash.callback_context
 
         if not ctx.triggered:
@@ -64,6 +70,8 @@ def create_app(ticker_series_data: Dict[str, Any], data: pd.DataFrame, qfin_data
             return '/balance-sheet-report-ts-data'
         elif button_id == 'company-stock-overview-data-page-button':
             return '/company-stock-overview-data'
+        elif button_id == 'company-discounted-cashflow-calculation-page-button':
+            return '/company-discounted-cashflow-calculation'
         else:
             return '/'
 
@@ -71,6 +79,7 @@ def create_app(ticker_series_data: Dict[str, Any], data: pd.DataFrame, qfin_data
     register_quarterly_report_page_callbacks(app, qfin_data, qfin_map)
     register_balance_sheet_report_page_callbacks(app, bs_data, bs_map)
     register_individual_company_overview_callback(app, ticker_series_data)
+    register_discounted_cashflow_model_page_callbacks(app, cashflow_map, latest_ev_data)
 
     # Callback to handle the "Return to Home" button click
     @app.callback(

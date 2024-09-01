@@ -17,6 +17,7 @@ class RetrieveStockData:
         self._df_quarterly = None
         self._df_balance_sheet = None
         self._df_stock_history = None
+        self._df_cashflow = None
         self.stock_info = None
         self.stock_info_key = None
         self.recent_key_metrics = None
@@ -24,6 +25,7 @@ class RetrieveStockData:
         self.data_store = {}
         self.stock_level_data_store = {}
         self.qfin_columns = ['Basic EPS', 'Operating Income', 'Total Revenue', 'Gross Profit', 'Net Income', 'EBITDA']
+        self.cashflow_columns = ['Free Cash Flow', 'Operating Cash Flow', 'Capital Expenditure']
         self.stock_ticker = stock_ticker  # Tickers if we want to look at multiple stock tickers at once
         self.stock = yf.Ticker(self.stock_ticker)
         self.stock_check_then_retrieve_data()
@@ -34,6 +36,7 @@ class RetrieveStockData:
         try:
             self.retrieve_balance_sheet()
             self.retrieve_recent_quarterly_financials()
+            self.retrieve_cashflow_data()
 
         except DataRetrievalError as e:
             print(f"Error {e}")
@@ -87,7 +90,8 @@ class RetrieveStockData:
                                    'price_to_book': self.safe_round(self.stock.info.get('priceToBook'), 2),
                                    'return_on_equity': self.safe_round(self.stock.info.get("returnOnEquity"), 2),
                                    'debt_to_equity_ratio': self.safe_round(self.stock.info.get("debtToEquity"), 2),
-                                   "EV_EBIDTA": self.safe_round(self.safe_divide(self.stock.info.get("enterpriseValue"), self.stock.info.get("ebitda")), 2)
+                                   "EV_EBIDTA": self.safe_round(self.safe_divide(self.stock.info.get("enterpriseValue"), self.stock.info.get("ebitda")), 2),
+                                   "enterprise_value": self.safe_round(self.stock.info.get("enterpriseValue"), 2)
                                    }
         latest_eps = None
         try:
@@ -166,6 +170,14 @@ class RetrieveStockData:
         self.stock_level_data_store['net_margin_yoy'] = round(net_margin_this_year / net_margin_last_year - 1, 2) * 100
         self.stock_level_data_store['stock_price_yoy'] = round(stock_history['Close'].iloc[-1] / stock_history['Close'].iloc[0] - 1, 2) * 100
         return self.stock_level_data_store
+
+    def retrieve_cashflow_data(self):
+        self._df_cashflow = self.stock.cashflow
+
+    def get_cashflow_data(self):
+        df = self._df_cashflow.transpose()
+        df.sort_index(inplace=True)
+        return df[self.cashflow_columns]
 
     def retrieve_stock_info(self):
         self.stock_info = self.stock.info
