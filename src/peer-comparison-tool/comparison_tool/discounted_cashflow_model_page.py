@@ -28,7 +28,7 @@ def get_discounted_cashflow_model_page_layout(data, latest_ev_data):
             dbc.Col([
                 html.Label("Select Company:", style={'color': colors['text']}),
                 dcc.Dropdown(
-                    id='ticker-dropdown',
+                    id='company-dropdown',
                     options=[{'label': ticker, 'value': ticker} for ticker in list(data.keys())],
                     value=list(data.keys())[0],  # Default selection - jut pick first ticker
                     multi=False,
@@ -39,20 +39,20 @@ def get_discounted_cashflow_model_page_layout(data, latest_ev_data):
             ], width=6),
 
             dbc.Col([
-                html.H4('Forecasting Inputs', className='mb-3'),  # Main heading
+                html.H4('Forecasting Inputs'),  # Main heading
 
                 dbc.Row([
                     dbc.Col([
-                        html.H5('Growth Rate (%)', className='mt-4'),  # Sub-heading for Growth Rate
+                        html.H5('Growth Rate (%)'),  # Sub-heading for Growth Rate
                         dcc.Input(id='growth-rate-input', type='number', value=5),
                     ], width=2),
                     dbc.Col([
-                        html.H5('Discount Rate (%)', className='mt-4'),  # Sub-heading for Discount Rate
+                        html.H5('Discount Rate (%)'),  # Sub-heading for Discount Rate
                         dcc.Input(id='discount-rate-input', type='number', value=10),
                     ], width=2),
                     dbc.Col([
-                        html.H5('Terminal Rate (%)', className='mt-4'),  # Sub-heading for Terminal Rate
-                        dcc.Input(id='discount-rate-input', type='number', value=10),
+                        html.H5('Terminal Rate (%)'),  # Sub-heading for Terminal Rate
+                        dcc.Input(id='terminal-rate-input', type='number', value=8),
                     ], width=2)
                 ]),
 
@@ -119,12 +119,12 @@ def register_discounted_cashflow_model_page_callbacks(app, cashflow_map, latest_
             return ""
 
         # Fetch financial data and calculate DCF
-        df_cashflow = cashflow_map.get(ticker)
+        df_cashflow = cashflow_map.get(ticker).reset_index(names=['date'])
         if df_cashflow is None:
             return ""
 
         # Example calculation (simplified)
-        latest_free_cashflow = df_cashflow.loc['Free Cash Flow'].values[-1]  # we want the latest value as ordered
+        latest_free_cashflow = df_cashflow['Free Cash Flow'].iloc[-1]  # we want the latest value as ordered
         future_cashflows = []
         discounted_future_cashflows = []
         for year in range(1, CF_FUTURE_YEARS + 1):
@@ -134,21 +134,25 @@ def register_discounted_cashflow_model_page_callbacks(app, cashflow_map, latest_
         discounted_terminal_value = terminal_value / ((1 + discount_rate / 100) ** CF_FUTURE_YEARS)
 
         # Cash flow ts: add the forecast cashflow to the historical cashflows
-        start_date = df_cashflow['date'] + relativedelta(years=1)
-        df_future_cashflow = pd.DataFrame({"date": pd.date_range(start_date, periods=CF_FUTURE_YEARS, freq='Y'),
-                                           "Free Cash Flow": discounted_future_cashflows})
+        start_date = df_cashflow['date'].iloc[-1] + pd.DateOffset(years=1)
+        df_future_cashflow = pd.DataFrame({"date": pd.date_range(start_date.strftime("%Y-%m-%d"), periods=CF_FUTURE_YEARS, freq='Y'),
+                                           "Discounted Forecast Free Cash Flow": discounted_future_cashflows})
         df_ts_plot = pd.concat([df_cashflow[['date', 'Free Cash Flow']], df_future_cashflow])
 
-        df_ts_plot['year'] = df_ts_plot.index.dt.year.astype(str)
+        df_ts_plot['year'] = df_ts_plot['date'].dt.year.astype(str)
+        df_ts_plot = df_ts_plot.melt(id_vars='year', value_vars=['Free Cash Flow', 'Discounted Forecast Free Cash Flow'],
+                                     var_name='Cash Flow Type', value_name='Value')
         # Now lets add the calculated free cash flow values forecast:
-        cashflow_ts_plot = px.line(df_ts_plot, x='year', y='Free Cash Flow',
-                                   title="Present Discounted Cash Flow Growth Over Time")
+        cashflow_ts_plot = px.line(df_ts_plot, x='year', y='Value', color='Cash Flow Type',
+                                   title="Historical Cash Flow and Discounted Forecast Cash Flow Growth Over Time")
 
         # And calculate the DCF:
-        dcf_value = sum(discounted_future_cashflows) + discounted_terminal_value
+        dcf_value = int(sum(discounted_future_cashflows) + discounted_terminal_value)
+        dcf_value_str = f"{int((sum(discounted_future_cashflows) + discounted_terminal_value) / 1_000_000)} mm"
 
-        ev_value = latest_ev.loc[ticker, "enterprise_value"]
+        ev_value_str = f"{int(latest_ev.loc[ticker, 'enterprise_value'] / 1_000_000)} mm"
+        ev_value = latest_ev.loc[ticker, 'enterprise_value']
 
-        percentage_error = (dcf_value - ev_value) / ev_value
+        percentage_error = round((dcf_value - ev_value) / ev_value * 100, 2)
 
-        return dcf_value, ev_value, percentage_error, cashflow_ts_plot
+        return dcf_value_str, ev_value_str, percentage_error, cashflow_ts_plot

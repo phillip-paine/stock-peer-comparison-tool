@@ -28,7 +28,7 @@ def create_app(ticker_series_data: Dict[str, Any], data: pd.DataFrame, qfin_data
         html.Div(id='page-content', style={'backgroundColor': colors['background']})
     ])
 
-    latest_ev_data = data[['ticker', 'enterprise_value']]
+    latest_ev_data = data[['ticker', 'enterprise_value']].set_index(keys='ticker')
 
     # Callback to update the page content based on URL
     @app.callback(Output('page-content', 'children'),
