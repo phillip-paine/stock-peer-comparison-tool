@@ -36,7 +36,7 @@ def get_discounted_cashflow_model_page_layout(data, latest_ev_data):
                     placeholder="Select ticker...",
                     style={'marginBottom': '15px'}
                 )
-            ], width=6),
+            ], width=3),
 
             dbc.Col([
                 html.H4('Forecasting Inputs'),  # Main heading
@@ -44,32 +44,38 @@ def get_discounted_cashflow_model_page_layout(data, latest_ev_data):
                 dbc.Row([
                     dbc.Col([
                         html.H5('Growth Rate (%)'),  # Sub-heading for Growth Rate
-                        dcc.Input(id='growth-rate-input', type='number', value=5),
-                    ], width=2),
+                        dbc.InputGroup([
+                            dcc.Input(id='growth-rate-input', type='number', value=5)
+                        ]),
+                    ], width=3),
                     dbc.Col([
                         html.H5('Discount Rate (%)'),  # Sub-heading for Discount Rate
-                        dcc.Input(id='discount-rate-input', type='number', value=10),
-                    ], width=2),
+                        dbc.InputGroup([
+                            dcc.Input(id='discount-rate-input', type='number', value=10)
+                        ]),
+                    ], width=3),
                     dbc.Col([
                         html.H5('Terminal Rate (%)'),  # Sub-heading for Terminal Rate
-                        dcc.Input(id='terminal-rate-input', type='number', value=8),
-                    ], width=2)
+                        dbc.InputGroup([
+                            dcc.Input(id='terminal-rate-input', type='number', value=8)
+                        ]),
+                    ], width=3)
                 ]),
 
                 # Calculate DCF Button
                 html.Button("Calculate DCF", id="calculate-dcf-button", n_clicks=0, style={'marginTop': '20px'}),
 
-            ], width=6)
+            ])
         ]),
 
         # Plot Cashflow and DCF over time and show discounted cash flow values:
         dbc.Row([
             dbc.Col([
-                html.H5("Cash Flow Growth Over Time"),
+                html.H5("Present Value Cash Flow Growth"),
                 dcc.Graph(id="cash-flow-growth-plot"),
             ], width=8),
             dbc.Col([
-                html.H5("Discounted Cash Flow:"),
+                html.H5("EV -to- Discounted Cash Flow:"),
 
                 # EV Value
                 dbc.Card([
@@ -87,19 +93,19 @@ def get_discounted_cashflow_model_page_layout(data, latest_ev_data):
                         # Low scenario percentage error
                         dbc.Row([
                             dbc.Col(html.H5("Low (Bear):"), width=4),
-                            dbc.Col(html.H5(id="bear-percentage-error", style={"color": "red"}), width=8),
+                            dbc.Col(html.H5(id="bear-percentage-error"), width=8),
                         ], className="mb-2"),
 
                         # Mid scenario percentage error
                         dbc.Row([
                             dbc.Col(html.H5("Mid (Base):"), width=4),
-                            dbc.Col(html.H5(id="base-percentage-error", style={"color": "white"}), width=8),
+                            dbc.Col(html.H5(id="base-percentage-error"), width=8),
                         ], className="mb-2"),
 
                         # High scenario percentage error
                         dbc.Row([
                             dbc.Col(html.H5("High (Bull):"), width=4),
-                            dbc.Col(html.H5(id="bull-percentage-error", style={"color": "green"}), width=8),
+                            dbc.Col(html.H5(id="bull-percentage-error"), width=8),
                         ]),
                     ]),
                 ], style={'background-color': colors['background'], 'margin-bottom': '10px'})
@@ -115,6 +121,9 @@ def register_discounted_cashflow_model_page_callbacks(app, cashflow_map, latest_
         dash.dependencies.Output('base-percentage-error', 'children'),
         dash.dependencies.Output('bear-percentage-error', 'children'),
         dash.dependencies.Output('bull-percentage-error', 'children'),
+        dash.dependencies.Output('base-percentage-error', 'style'),
+        dash.dependencies.Output('bear-percentage-error', 'style'),
+        dash.dependencies.Output('bull-percentage-error', 'style'),
         dash.dependencies.Output("cash-flow-growth-plot", "figure"),
         dash.dependencies.Input('calculate-dcf-button', 'n_clicks'),
         dash.dependencies.State('company-dropdown', 'value'),
@@ -169,7 +178,12 @@ def register_discounted_cashflow_model_page_callbacks(app, cashflow_map, latest_
         low_percentage_error = round((low_dcf_value - ev_value) / ev_value * 100, 2)
         high_percentage_error = round((high_dcf_value - ev_value) / ev_value * 100, 2)
 
-        return ev_value_str, base_percentage_error, low_percentage_error, high_percentage_error, cashflow_ts_plot
+        bear_colour = {"color": determine_color(low_percentage_error)}
+        bull_colour = {"color": determine_color(high_percentage_error)}
+        mid_colour = {"color": determine_color(base_percentage_error)}
+
+        return ev_value_str, f"{base_percentage_error}", f"{low_percentage_error}", f"{high_percentage_error}", \
+            mid_colour, bear_colour, bull_colour, cashflow_ts_plot
 
 
 def create_forecast_cashflow_dataframe(latest_free_cashflow, growth_rate, discount_rate, terminal_rate, calculation_date):
@@ -187,3 +201,12 @@ def create_forecast_cashflow_dataframe(latest_free_cashflow, growth_rate, discou
     df_future_cashflow = pd.DataFrame({"date": pd.date_range(calculation_date.strftime("%Y-%m-%d"), periods=CF_FUTURE_YEARS, freq='Y'),
                                        "Discounted Forecast Free Cash Flow": discounted_future_cashflows})
     return df_future_cashflow, total_discounted_future_cashflows, discounted_terminal_value
+
+
+def determine_color(value):
+    if value < -10:
+        return "red"
+    elif value > 10:
+        return "green"
+    else:
+        return "white"
