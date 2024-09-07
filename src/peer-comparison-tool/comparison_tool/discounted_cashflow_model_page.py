@@ -36,7 +36,7 @@ def get_discounted_cashflow_model_page_layout(data, latest_ev_data):
                     placeholder="Select ticker...",
                     style={'marginBottom': '15px'}
                 )
-            ], width=3),
+            ], width=6),
 
             dbc.Col([
                 html.H4('Forecasting Inputs'),  # Main heading
@@ -72,11 +72,12 @@ def get_discounted_cashflow_model_page_layout(data, latest_ev_data):
         dbc.Row([
             dbc.Col([
                 html.H5("Present Value Cash Flow Growth"),
-                dcc.Graph(id="cash-flow-growth-plot"),
+                dbc.Card([
+                    dcc.Graph(id="cash-flow-growth-plot")
+                ], style={'backgroundColor': colors['background']}),
             ], width=8),
             dbc.Col([
                 html.H5("EV -to- Discounted Cash Flow:"),
-
                 # EV Value
                 dbc.Card([
                     dbc.CardHeader("Enterprise Value (EV)"),
@@ -85,7 +86,6 @@ def get_discounted_cashflow_model_page_layout(data, latest_ev_data):
                         html.P("Current market-based value of the company", className='card-text')
                     ]),
                 ], style={'background-color': colors['background'], 'margin-bottom': '10px'}),
-
                 # Percentage Error for each scenario
                 dbc.Card([
                     dbc.CardHeader("Scenario Percentage Error"),
@@ -95,13 +95,11 @@ def get_discounted_cashflow_model_page_layout(data, latest_ev_data):
                             dbc.Col(html.H5("Low (Bear):"), width=4),
                             dbc.Col(html.H5(id="bear-percentage-error"), width=8),
                         ], className="mb-2"),
-
                         # Mid scenario percentage error
                         dbc.Row([
                             dbc.Col(html.H5("Mid (Base):"), width=4),
                             dbc.Col(html.H5(id="base-percentage-error"), width=8),
                         ], className="mb-2"),
-
                         # High scenario percentage error
                         dbc.Row([
                             dbc.Col(html.H5("High (Bull):"), width=4),

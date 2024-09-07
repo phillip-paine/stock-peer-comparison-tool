@@ -7,7 +7,7 @@ from .layout import create_container, create_header
 from .styles import colors
 import pandas as pd
 
-DISPLAY_COLS = ['name', 'sector', 'price_eps_ratio', 'market_cap_MM', 'EV_EBIDTA', 'latest_eps']
+DISPLAY_COLS = ['name', 'sector', 'price_eps_ratio', 'market_cap_MM', 'enterpriseToEbitda', 'latest_eps', 'profit_margin']
 NOT_METRICS = ['name', 'ticker', 'industry', 'sector', 'subsector', 'label', 'market_cap_string', 'market_cap']
 
 
@@ -236,7 +236,7 @@ def register_comparison_callbacks(app: dash.Dash, data: pd.DataFrame):
         fig3 = px.scatter(filtered_data, x=metric_one, y=metric_two, text='ticker', color="label",
                           hover_data={'label': False, 'name': True, 'market_cap_MM': True,
                                       'latest_eps': True, 'price_eps_ratio': True, 'return_on_equity': True,
-                                      'price_to_book': True, 'EV_EBIDTA': True},
+                                      'price_to_book': True, 'enterpriseToEbitda': True},
                           title=f"{metric_one} vs. {metric_two} Scatter Chart with Stock Outlier Labels")
 
         # Update figure layout for dark theme
@@ -272,7 +272,7 @@ def register_comparison_callbacks(app: dash.Dash, data: pd.DataFrame):
     def update_radar_chart(selected_companies):
         fig = go.Figure()
 
-        metrics = ['market_cap_MM', 'price_eps_ratio', 'price_to_book', 'return_on_equity', 'EV_EBIDTA']
+        metrics = ['market_cap_MM', 'price_eps_ratio', 'price_to_book', 'return_on_equity', 'enterpriseToEbitda', "profit_margin"]
 
         normalised_data = data[data['name'].isin(selected_companies)]
 

@@ -84,7 +84,7 @@ def create_main_data(tickers):
     df_qfinancials['Operating Income (MM)'] = df_qfinancials['Operating Income'] / 1_000_000  # in millions
 
     # clustering for scatter chart:
-    cluster_cols=["price_eps_ratio", "latest_eps", "return_on_equity", "EV_EBIDTA", "market_cap_MM"]
+    cluster_cols = ["price_eps_ratio", "latest_eps", "return_on_equity", "enterpriseToEbitda", "debt_to_equity_ratio", "profit_margin"]
     df_ticker_data = create_valuation_clusters(df=df_ticker_data, cols=cluster_cols, eps=0.5, min_samples=3)
 
     # industry average change:

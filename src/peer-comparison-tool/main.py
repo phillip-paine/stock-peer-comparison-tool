@@ -32,7 +32,8 @@ def execute_app(tickers):
 
 if __name__ == '__main__':
     df_ticker_id = pd.read_csv(os.path.expanduser('~/Documents/Code/peer-comparison-tool/data/sp500_security_ticker.csv'))
-    df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Utilities"]
-    tickers = df_ticker_id['Symbol']
-    tickers = ["AAPL", "MSFT", "AMZN", "NVDA", "META"]
+    # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Utilities"]
+    df_ticker_id = df_ticker_id[df_ticker_id['GICS Sub-Industry'] == "Specialty Chemicals"]
+    tickers = df_ticker_id['Symbol'].to_list()
+    # tickers = ["AAPL", "MSFT", "AMZN", "NVDA", "META"]
     main_run(tickers)

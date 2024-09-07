@@ -90,8 +90,9 @@ class RetrieveStockData:
                                    'price_to_book': self.safe_round(self.stock.info.get('priceToBook'), 2),
                                    'return_on_equity': self.safe_round(self.stock.info.get("returnOnEquity"), 2),
                                    'debt_to_equity_ratio': self.safe_round(self.stock.info.get("debtToEquity"), 2),
-                                   "EV_EBIDTA": self.safe_round(self.safe_divide(self.stock.info.get("enterpriseValue"), self.stock.info.get("ebitda")), 2),
-                                   "enterprise_value": self.safe_round(self.stock.info.get("enterpriseValue"), 2)
+                                   "enterprise_value": self.safe_round(self.stock.info.get("enterpriseValue"), 2),
+                                   "profit_margin": self.safe_round(self.stock.info.get("profitMargins"), 2),
+                                   "enterpriseToEbitda": self.safe_round(self.stock.info.get("enterpriseToEbitda"), 2),
                                    }
         latest_eps = None
         try:

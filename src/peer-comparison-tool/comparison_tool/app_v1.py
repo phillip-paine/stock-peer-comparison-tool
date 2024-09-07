@@ -5,7 +5,7 @@ import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 import pandas as pd
 
-DISPLAY_COLS = ['name', 'sector', 'price_eps_ratio', 'market_cap_string', 'EV_EBIDTA', 'latest_eps']
+DISPLAY_COLS = ['name', 'sector', 'price_eps_ratio', 'market_cap_string', 'enterpriseToEbitda', 'latest_eps']
 
 
 def create_app(data: pd.DataFrame):
@@ -225,7 +225,7 @@ def create_app(data: pd.DataFrame):
         fig1 = px.bar(filtered_data, x='latest_eps', y='ticker', title="Latest EPS Comparison", orientation='h')
         fig2 = px.bar(filtered_data, x='price_eps_ratio', y='ticker', title="P/E Ratio Comparison", orientation='h')
         fig3 = px.scatter(filtered_data, x='latest_eps', y='price_eps_ratio', text='ticker',
-                          hover_data={'market_cap': True, 'price_to_book': True, 'EV_EBIDTA': True},
+                          hover_data={'market_cap': True, 'price_to_book': True, 'enterpriseToEbitda': True},
                           title="EPS vs. P/E Ratio Scatter Chart")
 
         # Update figure layout for dark theme
@@ -261,7 +261,7 @@ def create_app(data: pd.DataFrame):
     def update_radar_chart(selected_companies):
         fig = go.Figure()
 
-        metrics = ['market_cap', 'price_eps_ratio', 'price_to_book', 'return_on_equity', 'EV_EBIDTA']
+        metrics = ['market_cap', 'price_eps_ratio', 'price_to_book', 'return_on_equity', 'enterpriseToEbitda']
 
         normalised_data = data[data['name'].isin(selected_companies)]
 
