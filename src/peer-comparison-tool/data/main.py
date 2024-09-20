@@ -14,7 +14,8 @@ def main(tickers):
     a = 1
 
 
-def create_main_data(tickers):
+def create_main_data(tickers_info_map):
+    gics_subindustry_list = list(set(tickers_info_map.values()))
     df_ticker_id = pd.read_csv(os.path.expanduser('~/Documents/Code/peer-comparison-tool/data/sp500_security_ticker.csv'))
     ticker_data_list = []
     ticker_data_series_maps: Dict[str, Any] = {}
@@ -23,11 +24,13 @@ def create_main_data(tickers):
     qfinancials_map: Dict[str, pd.DataFrame] = {}
     balancesheets_map: Dict[str, pd.DataFrame] = {}
     cashflow_map: Dict[str, pd.DataFrame] = {}
-    for ticker in tickers:
+    tickers_list = list(tickers_info_map.keys())
+    for ticker, subindustry in tickers_info_map.items():
         get_stock_data = RetrieveStockData(ticker)
 
         ticker_overview = get_stock_data.add_stock_overview_metrics_to_key_metrics()
         ticker_overview.update({'name': df_ticker_id[df_ticker_id['Symbol'] == ticker]['Security'].iloc[0]})
+        ticker_overview.update({'Sub-industry': subindustry})
         ticker_data_list.append(ticker_overview)
 
         # Write quarterly financials data:
@@ -66,7 +69,10 @@ def create_main_data(tickers):
             cashflow_map[ticker] = df_ticker_cashflow
 
         # get stock series and year-to-year change data
-        ticker_data_series_maps.update({ticker: get_stock_data.get_stock_level_data()})
+        try:
+            ticker_data_series_maps.update({ticker: get_stock_data.get_stock_level_data()})
+        except IndexError as e:
+            print(f"{e} for {ticker} during get_stock_data call")
 
         # if get_stock_data.stock_info_key is not None:
         #     click.echo(f"Key stock info for {ticker}: {get_stock_data.stock_info_key}")
@@ -93,26 +99,35 @@ def create_main_data(tickers):
 
     num_keys = len(ticker_data_series_maps)
     ticker_data_series_maps['industry'] = {}
-    for yoy_metric in list(ticker_data_series_maps[tickers[0]].keys()):
+    ticker_data_series_used = list(ticker_data_series_maps.keys())
+    for yoy_metric in list(ticker_data_series_maps[tickers_list[0]].keys()):
         if yoy_metric not in ['stock_price_data', 'stock_price_normalised_data']:
             ticker_data_series_maps['industry'].update({
-                f"{yoy_metric}": np.mean([ticker_data_series_maps[tcker][yoy_metric] for tcker in tickers])
+                f"{yoy_metric}": np.mean([ticker_data_series_maps[tcker].get(yoy_metric, 1) for tcker in ticker_data_series_used])
             })
         else:
             # calculate the industry price index and normalise:
-            industry_price_df = ticker_data_series_maps[tickers[0]][yoy_metric]
-            for ticker in tickers[1:]:
-                df_temp = ticker_data_series_maps[ticker][yoy_metric]
-                df_temp[f'Close_{ticker}'] = df_temp['Close']
-                industry_price_df = pd.merge(industry_price_df,
-                                             df_temp[['Date', f'Close_{ticker}']],
-                                             on=['Date'])
-
-            industry_price_df['Industry Close'] = industry_price_df[[c for c in industry_price_df.columns if c.startswith('Clos')]].sum(axis=1)
-            industry_price_df['Industry Close'] = industry_price_df['Industry Close'] / industry_price_df['Industry Close'].iloc[0] * 100
-            ticker_data_series_maps['industry'].update({
-                yoy_metric: industry_price_df[['Date', 'Industry Close']]
-            })
+            # todo this assumes that all tickers are from the same industry - now generalise this so it uses the
+            # todo sub-industry groupings - maybe save one column for each subindustry_close time series
+            industry_price_df = ticker_data_series_maps[tickers_list[0]][yoy_metric]
+            for ticker in ticker_data_series_used:
+                try:
+                    df_temp = ticker_data_series_maps[ticker][yoy_metric]
+                    df_temp[f'Close_{ticker}'] = df_temp['Close']
+                    industry_price_df = pd.merge(industry_price_df,
+                                                 df_temp[['Date', f'Close_{ticker}']],
+                                                 on=['Date'])
+                except KeyError as e:
+                    print(f"{e} for {ticker} when calculating YoY values")
+            for sub_industry in gics_subindustry_list:
+                sub_industry_cols = [c for c in industry_price_df.columns if c.startswith('Close') and any(substr in c for substr in sub_industry)]
+                sub_industry_price_col = f'{sub_industry} Close'
+                industry_price_df[sub_industry_price_col] = industry_price_df[sub_industry_cols].sum(axis=1)
+                industry_price_df[sub_industry_price_col] = industry_price_df[sub_industry_price_col] / industry_price_df[sub_industry_price_col].iloc[0] * 100
+                ticker_data_series_maps[f'Industry Index:{sub_industry}'] = {
+                    yoy_metric: industry_price_df[['Date', sub_industry_price_col]]
+                }
+                # todo then we can use the subindustry time series of close (and other metrics?) in the app home_page
 
     return ticker_data_series_maps, df_ticker_data, df_qfinancials, df_balancesheets, qfinancials_map, balancesheets_map, cashflow_map
 
@@ -133,4 +148,4 @@ def execute(tickers):
 
 
 if __name__ == '__main__':
-    main(["AAPL", "AMZN"])
+    main({"AAPL": "testA", "AMZN": "testB"})

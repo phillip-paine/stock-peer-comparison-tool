@@ -19,11 +19,11 @@ def get_comparison_page_layout(data: pd.DataFrame):
 
         dbc.Row([
             dbc.Col([
-                html.Label("Select Sectors:", style={'color': colors['text']}),
+                html.Label("Select GICS Sub-industry:", style={'color': colors['text']}),
                 dcc.Dropdown(
                     id='sector-dropdown',
-                    options=[{'label': sector, 'value': sector} for sector in data['sector'].unique()],
-                    value=[data['sector'].iloc[0]],  # Default selection - jut pick first sector? or leave blank?
+                    options=[{'label': sector, 'value': sector} for sector in data['industry'].unique()],
+                    value=[data['industry'].iloc[0]],  # Default selection - jut pick first sector? or leave blank?
                     multi=True,
                     searchable=True,
                     style={'marginBottom': '15px'}
@@ -225,7 +225,7 @@ def register_comparison_callbacks(app: dash.Dash, data: pd.DataFrame):
             filtered_data = data
         else:
             # Filter data based on selected sectors
-            filtered_data = data[data['sector'].isin(selected_sectors)]
+            filtered_data = data[data['industry'].isin(selected_sectors)]
 
         # Update DataTable
         table_data = filtered_data.sort_values(by=['price_eps_ratio'], ascending=False).to_dict('records')

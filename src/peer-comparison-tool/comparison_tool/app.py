@@ -6,7 +6,7 @@ import dash_bootstrap_components as dbc
 from typing import Dict, Any
 
 # from .layout import create_container
-from .landing_page import get_landing_page_layout
+from .landing_page import get_landing_page_layout_v2
 from .comparison_page import get_comparison_page_layout, register_comparison_callbacks
 from .company_quarterly_report_page import get_quarterly_report_page_layout, register_quarterly_report_page_callbacks
 from .company_balance_sheet_report_page import get_balance_sheet_report_page_layout, register_balance_sheet_report_page_callbacks
@@ -30,6 +30,13 @@ def create_app(ticker_series_data: Dict[str, Any], data: pd.DataFrame, qfin_data
 
     latest_ev_data = data[['ticker', 'enterprise_value']].set_index(keys='ticker')
 
+    # Create the home page data:
+    sub_industries = [key.split(":")[0] for key in ticker_series_data.keys() if key.startswith("Industry Index")]
+    overview_data = {}
+    for sub_industry in sub_industries:
+        sub_industry_map = {}
+        overview_data[sub_industry] = sub_industry_map
+
     # Callback to update the page content based on URL
     @app.callback(Output('page-content', 'children'),
                   [Input('url', 'pathname')])
@@ -45,7 +52,7 @@ def create_app(ticker_series_data: Dict[str, Any], data: pd.DataFrame, qfin_data
         elif pathname == '/company-discounted-cashflow-calculation':
             return get_discounted_cashflow_model_page_layout(cashflow_map, latest_ev_data)
         else:
-            return get_landing_page_layout()
+            return get_landing_page_layout_v2(overview_data)
 
     # Callback for navigation buttons
     @app.callback(Output('url', 'pathname'),
