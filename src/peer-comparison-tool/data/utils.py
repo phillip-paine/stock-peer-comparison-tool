@@ -11,9 +11,9 @@ def create_valuation_clusters(df: pd.DataFrame, cols: List[str], eps: float=0.25
     df_clusters = apply_dbscan(df_clusters, cols, eps, min_samples)
     # add in any missing data companies with the default cluster:
     df = pd.merge(df, df_clusters[['ticker', 'label']], on=['ticker'], how='left')
-    df['label'] = df['label'].fillna(value=DEFAULT_LABEL)
+    df['cluster_membership'] = df['label'].fillna(value=DEFAULT_LABEL)
 
-    return df
+    return df[['ticker', 'cluster_membership']]
 
 
 def apply_dbscan(df: pd.DataFrame, cols: List[str], eps: float = 0.25, min_samples: int = 4):
@@ -31,9 +31,12 @@ def apply_dbscan(df: pd.DataFrame, cols: List[str], eps: float = 0.25, min_sampl
     dbscan = DBSCAN(eps=eps, min_samples=min_samples)
     array_list = []
     for col in cols:
-        x_normalised = (df[col].values - df[col].min()) / (df[col].max() - df[col].min())
+        x_normalised = (df[col].values - df[col].min()) / (df[col].max() - df[col].min() + 0.0001)
         array_list.append(x_normalised)
-
+    # TODO if none/one rows then dont go into dbscan.fit_predict
+    if len(df.index) <= 1:
+        df['label'] = DEFAULT_LABEL
+        return df
     df['cluster'] = dbscan.fit_predict(X=np.column_stack(array_list))
     # set red as outlier:
     df['label'] = df['cluster'].apply(lambda row: 'Cluster member' if row != -1 else DEFAULT_LABEL)

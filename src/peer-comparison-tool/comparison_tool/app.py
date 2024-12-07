@@ -16,9 +16,11 @@ from .discounted_cashflow_model_page import get_discounted_cashflow_model_page_l
 from .styles import colors
 
 
-def create_app(ticker_series_data: Dict[str, Any], data: pd.DataFrame, qfin_data: pd.DataFrame, bs_data: pd.DataFrame,
-               qfin_map: Dict[str, pd.DataFrame], bs_map: Dict[str, pd.DataFrame], cashflow_map: Dict[str, pd.DataFrame]):
-
+def create_app(db_conn):
+    # TODO remove:
+    # (ticker_series_data: Dict[str, Any], data: pd.DataFrame, qfin_data: pd.DataFrame, bs_data: pd.DataFrame,
+    # qfin_map: Dict[str, pd.DataFrame], bs_map: Dict[str, pd.DataFrame], cashflow_map: Dict[str, pd.DataFrame]
+    # TODO get data from sql tables (should be in right format mostly)
     # Initialize the Dash app
     app = dash.Dash(__name__, external_stylesheets=[dbc.themes.CYBORG],suppress_callback_exceptions=True)
 
@@ -27,6 +29,8 @@ def create_app(ticker_series_data: Dict[str, Any], data: pd.DataFrame, qfin_data
         dcc.Location(id='url', refresh=False),
         html.Div(id='page-content', style={'backgroundColor': colors['background']})
     ])
+
+    # Retrieve data from connection:  # TODO only retrieve what we need, do this later.
 
     latest_ev_data = data[['ticker', 'enterprise_value']].set_index(keys='ticker')
 

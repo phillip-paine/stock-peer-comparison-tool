@@ -153,7 +153,10 @@ class RetrieveStockData:
     def get_stock_level_data(self):
         stock_history = self.stock.history(period='1y')
         stock_history.reset_index(inplace=True)
-        self.stock_level_data_store['stock_price_data'] = stock_history[['Date', 'Close']]
+        stock_history['Date'] = pd.to_datetime(stock_history['Date']).dt.tz_localize(None)
+        stock_history['Close Indexed'] = stock_history['Close'] / stock_history['Close'].iloc[0] * 100
+        stock_history['ticker'] = self.stock_ticker
+        self.stock_level_data_store['stock_price_data'] = stock_history[['ticker', 'Date', 'Close', 'Close Indexed']]
         # Create the normalised stock price data:
         stock_history_normalised = stock_history[['Date', 'Close']].copy()
         stock_history_normalised['Close'] = stock_history_normalised['Close'] / stock_history_normalised['Close'].iloc[0] * 100
@@ -178,6 +181,7 @@ class RetrieveStockData:
     def get_cashflow_data(self):
         df = self._df_cashflow.transpose()
         df.sort_index(inplace=True)
+        df['ticker'] = self.stock_ticker
         return df[self.cashflow_columns]
 
     def retrieve_stock_info(self):
