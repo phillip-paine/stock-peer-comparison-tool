@@ -1,15 +1,17 @@
-query_industry_price_aggregation = """
+query_create_industry_price_aggregation = """
     WITH ticker_sector_price as (
-        SELECT * FROM ticker_time_series as TTS 
-        JOIN (SELECT * from company_info) as CI ON TTS.ticker = CI.ticker
+        SELECT TTS.*, CI.sub_industry FROM ticker_time_series as TTS 
+        JOIN (SELECT ticker, sub_industry from company_info) as CI ON TTS.ticker = CI.ticker
     ),
+    
     industry_aggregate_price as (
-        SELECT industry, date, sum(close_price) as industry_close_price, sum(close_price_indexed) as industry_close_price_indexed
+        SELECT sub_industry, date, sum(close_price) as industry_close_price, sum(close_price_indexed) as industry_close_price_indexed
         FROM ticker_sector_price
-        GROUP BY industry, date
+        GROUP BY sub_industry, date
     )
-    INSERT INTO industry_time_series (industry, date, industry_close_price, industry_close_price_indexed) 
-    SELECT * from industry_aggregate_price WHERE date >= ?;
+    
+    INSERT OR IGNORE INTO industry_time_series (sub_industry, date, industry_close_price, industry_close_price_indexed)
+    select * from industry_aggregate_price limit 1;
 """
 
 query_industry_price_yoy = """
@@ -18,9 +20,9 @@ query_industry_price_yoy = """
 
 query_industry_aggregation = """
     WITH quarterly_sector_financials as (
-        SELECT * FROM quarterly_financial_data as QFD JOIN (SELECT ticker, .. FROM company_info) as CI on QFD.ticker = CI.ticker
+        SELECT * FROM quarterly_financial_data as QFD JOIN (SELECT ticker, sub_industry FROM company_info) as CI on QFD.ticker = CI.ticker
     )
-    SELECT * FROM xyz JOIN quarterly_sector_financials as QFD on xyz.a = QFD.a where xyz.date > (date) 
+    SELECT * FROM quarterly_sector_financials JOIN quarterly_sector_financials as QFD on xyz.a = QFD.a where xyz.date > (date) 
 """
 
 query_ticker_yoy = """
@@ -35,7 +37,7 @@ query_ticker_yoy = """
             close_price_indexed / close_price_indexed_year - 1 as close_price_indexed_yoy
         FROM ticker_price_year_lag
     ) 
-    INSERT INTO ticker_ts_yoy (ticker, date, close_price_yoy, close_price_indexed_yoy) 
+    INSERT OR IGNORE INTO ticker_ts_yoy (ticker, date, close_price_yoy, close_price_indexed_yoy) 
     SELECT ticker, date, close_price_yoy, close_price_indexed_yoy FROM temp_ticker_price_yoy
 """
 
@@ -43,4 +45,12 @@ recent_metrics_sector_query = """
     SELECT RCM.*, CI.sub_industry FROM ticker_most_recent_metric_data as RCM
     LEFT JOIN (SELECT ticker, sub_industry from company_info) as CI on RCM.ticker = CI.ticker
     WHERE sub_industry = ?
+"""
+
+get_table_data_query = """
+    SELECT * FROM ? 
+"""
+
+get_table_data_within_dates_query = """
+    SELECT * FROM ? where date >= ?
 """

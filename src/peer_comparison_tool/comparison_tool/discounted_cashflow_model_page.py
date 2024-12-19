@@ -14,7 +14,8 @@ from .layout import create_container, create_header
 CF_FUTURE_YEARS = 5
 
 
-def get_discounted_cashflow_model_page_layout(data, latest_ev_data):
+def get_discounted_cashflow_model_page_layout(latest_ev_data):
+    unique_ticker_list = list(latest_ev_data['ticker'].unique)
     return dbc.Container([
         dbc.Row([
             dbc.Col(
@@ -29,8 +30,8 @@ def get_discounted_cashflow_model_page_layout(data, latest_ev_data):
                 html.Label("Select Company:", style={'color': colors['text']}),
                 dcc.Dropdown(
                     id='company-dropdown',
-                    options=[{'label': ticker, 'value': ticker} for ticker in list(data.keys())],
-                    value=list(data.keys())[0],  # Default selection - jut pick first ticker
+                    options=[{'label': ticker, 'value': ticker} for ticker in unique_ticker_list],
+                    value=unique_ticker_list[0],  # Default selection - jut pick first ticker
                     multi=False,
                     searchable=True,
                     placeholder="Select ticker...",

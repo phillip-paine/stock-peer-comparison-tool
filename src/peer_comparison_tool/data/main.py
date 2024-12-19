@@ -8,7 +8,7 @@ from .retriever import RetrieveStockData
 from .constants import TICKERS
 from .utils import create_valuation_clusters
 
-from .db_utils import update_yoy_aggregations, insert_or_replace, insert_or_ignore
+from .db_utils import update_yoy_aggregations, update_industry_aggregations, insert_or_replace, insert_or_ignore
 from .queries import recent_metrics_sector_query
 
 
@@ -39,7 +39,8 @@ def create_ticker_data(tickers_info_map, sql_connection):
         ticker_overview.update({'name': df_ticker_id[df_ticker_id['Symbol'] == ticker]['Security'].iloc[0]})
         ticker_overview.update({'sub_industry': subindustry})
         company_most_recent_metrics_list.append(ticker_overview)
-        company_info_map = {key: ticker_overview[key] for key in ["ticker", "name", "sector", "industry", "sub_industry"]}
+        company_info_map = {key: ticker_overview[key] for key in
+                            ["ticker", "name", "sector", "industry", "sub_industry"]}
         company_info_data_list.append(company_info_map)
 
         # Write quarterly financials data:
@@ -152,10 +153,11 @@ def create_ticker_data(tickers_info_map, sql_connection):
 
     # TODO : here we insert the new data in the tables and append to the existing rows
     # 1. df_ticker_data = company_info table (ticker, name, sector, industry, sub_industry):
-    insert_or_ignore(cur, 'company_info', df_ticker_data)
+    insert_or_replace(cur, 'company_info', df_ticker_data)
     # df_ticker_data.to_sql('company_info', sql_connection, if_exists='append', index=False)  # TODO no duplicate rows.
     recent_metrics_table_keys = ['ticker', 'market_cap', 'price_eps_ratio', 'price_to_book', 'return_on_equity',
-                                 'debt_to_equity_ratio', 'profit_margin', 'enterpriseToEbitda', 'latest_eps']
+                                 'debt_to_equity_ratio', 'profit_margin', 'enterpriseToEbitda', 'latest_eps',
+                                 'enterprise_value']
     # df_ticker_recent_metrics[recent_metrics_table_keys].to_sql('ticker_most_recent_metric_data', sql_connection,
     #                                                            if_exists='append', index=False,
     #                                                            method=insert_or_replace)
@@ -218,7 +220,7 @@ def create_aggregations_data(conn, ticker_subindustry_map: Dict[str, str]):
     update_yoy_aggregations(conn)
 
     # Industry Aggregation:
-    # update_industry_aggregations(conn)
+    update_industry_aggregations(conn)
 
     conn.commit()
     cur.close()

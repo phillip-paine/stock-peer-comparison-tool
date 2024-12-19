@@ -23,7 +23,7 @@ def get_comparison_page_layout(data: pd.DataFrame):
                 dcc.Dropdown(
                     id='sector-dropdown',
                     options=[{'label': sector, 'value': sector} for sector in data['industry'].unique()],
-                    value=[data['industry'].iloc[0]],  # Default selection - jut pick first sector? or leave blank?
+                    value=[data['sub_industry'].iloc[0]],  # Default selection - jut pick first sector? or leave blank?
                     multi=True,
                     searchable=True,
                     style={'marginBottom': '15px'}
@@ -225,9 +225,10 @@ def register_comparison_callbacks(app: dash.Dash, data: pd.DataFrame):
             filtered_data = data
         else:
             # Filter data based on selected sectors
-            filtered_data = data[data['industry'].isin(selected_sectors)]
+            filtered_data = data[data['sub_industry'].isin(selected_sectors)]
 
         # Update DataTable
+
         table_data = filtered_data.sort_values(by=['price_eps_ratio'], ascending=False).to_dict('records')
 
         # Create bar chart figure

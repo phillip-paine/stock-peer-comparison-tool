@@ -2,22 +2,18 @@ import dash
 from dash import html, dash_table, dcc
 import dash_bootstrap_components as dbc
 import plotly.express as px
-import os
 import plotly.graph_objects as go
 from .styles import colors
+import os
 from .constants import DOWNLOAD_DIR
 
-import pandas as pd
 
-from .layout import create_container, create_header
-
-
-# Function to get the layout for the Financial Time Series Page
-def get_quarterly_report_page_layout(data, export_data_map):
+def get_balance_sheet_report_page_layout(data):
+    unique_ticker_list = list(data['ticker'].unique)
     return dbc.Container([
         dbc.Row([
             dbc.Col(
-                html.H1("Company Quarterly Report Time Series", style={'color': colors['text'], 'textAlign': 'center'}), width=10,
+                html.H1("Company Balance Sheet Report Time Series", style={'color': colors['text'], 'textAlign': 'center'}), width=10,
                 className="mb-4"),
             dbc.Col(dbc.Button("Return to Home", id="back-to-home", color="primary", className="mb-3"), width=2)
         ], align='center'
@@ -41,13 +37,11 @@ def get_quarterly_report_page_layout(data, export_data_map):
                 dcc.Dropdown(
                     id='metric-dropdown',
                     options=[
-                        {'label': 'Gross Margin', 'value': 'Gross Margin'},
-                        {'label': 'Operating Margin', 'value': 'Operating Margin'},
-                        {'label': 'Net Margin', 'value': 'Net Margin'},
-                        {'label': 'EBITDA Margin', 'value': 'EBITDA Margin'},
-                        {'label': 'EPS', 'value': 'Basic EPS'}
+                        {'label': 'Quick Ratio', 'value': 'Quick Ratio'},
+                        {'label': 'Equity Ratio', 'value': 'Equity Ratio'},
+                        {'label': 'Debt-to-Equity Ratio', 'value': 'Debt-to-Equity Ratio'}
                     ],
-                    value='Gross Margin',
+                    value='Quick Ratio',
                     multi=False,
                     searchable=True,
                     placeholder="Select a metric...",
@@ -57,29 +51,29 @@ def get_quarterly_report_page_layout(data, export_data_map):
             dbc.Col([
                 html.Label(["Select Ticker to Export"], style={'color': colors['text']}),
                 dcc.Dropdown(
-                    id='ticker-export-dropdown',
-                    options=[{'label': ticker, 'value': ticker} for ticker in export_data_map.keys()],
+                    id='ticker-bs-export-dropdown',
+                    options=[{'label': ticker, 'value': ticker} for ticker in unique_ticker_list],
                     searchable=True,
-                    value=list(export_data_map.keys())[0],  # Set default value
+                    value=unique_ticker_list[0],  # Set default value
                     style={'width': '80%'}
                 ),
             ], width=3),
             dbc.Col([
-                html.Button('Export Data', id='export-qfin-button', n_clicks=0),
-                dcc.Download(id='download-csv'),
+                html.Button('Export Data', id='export-bsdata-button', n_clicks=0),
+                dcc.Download(id='download-bs-csv'),
                 html.Div(id='display-data')
             ], width=1),
         ]),
         dbc.Row([
-            dbc.Col(dcc.Graph(id='time-series-chart', config={'displayModeBar': False}), width=12)
+            dbc.Col(dcc.Graph(id='bs-time-series-chart', config={'displayModeBar': False}), width=12)
         ])
 
     ], fluid=True, style={'backgroundColor': colors['background']})
 
 
-def register_quarterly_report_page_callbacks(app, data, qfin_map):
+def register_balance_sheet_report_page_callbacks(app, data):
     @app.callback(
-        dash.dependencies.Output('time-series-chart', 'figure'),
+        dash.dependencies.Output('bs-time-series-chart', 'figure'),
         [dash.dependencies.Input('sector-dropdown', 'value'),
          dash.dependencies.Input('metric-dropdown', 'value')]
     )
@@ -100,7 +94,7 @@ def register_quarterly_report_page_callbacks(app, data, qfin_map):
         # Create time series plot
         fig = px.line(filtered_data, x='date', y=selected_metric, color='ticker',
                       title=f"{selected_metric} over Time",
-                      labels={'date': 'Quarter', selected_metric: selected_metric},
+                      labels={'date': 'Year', selected_metric: selected_metric},
                       hover_data={data_col: True for data_col in data.columns if data_col not in['date']},
                       markers=True)
 
@@ -117,21 +111,21 @@ def register_quarterly_report_page_callbacks(app, data, qfin_map):
         return fig
 
     @app.callback(
-        dash.dependencies.Output('download-csv', 'data'),
-        dash.dependencies.Input('export-qfin-button', 'n_clicks'),
-        dash.dependencies.Input('ticker-export-dropdown', 'value'),
+        dash.dependencies.Output('download-bs-csv', 'data'),
+        dash.dependencies.Input('export-bsdata-button', 'n_clicks'),
+        dash.dependencies.Input('ticker-bs-export-dropdown', 'value'),
         prevent_initial_call=True
     )
     def export_data(n_clicks, selected_ticker):
         if n_clicks > 0 and selected_ticker:
             # Get the selected balance sheet DataFrame
-            df = qfin_map[selected_ticker]
+            df = data['ticker']
 
             # Convert the DataFrame to a CSV string
             csv_string = df.to_csv(index=False)
 
             # Return the data for download
-            filename = f"{selected_ticker}_historical_10Q_quarterly_reports_{most_recent_report_date(df)}.csv"
+            filename = f"{selected_ticker}_historical_10K_balance_sheet_{most_recent_report_date(df)}.csv"
             filepath = os.path.join(os.path.expanduser(DOWNLOAD_DIR), filename)
             if os.path.exists(filepath):
                 return dash.no_update

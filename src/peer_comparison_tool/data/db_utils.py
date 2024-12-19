@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
-from queries import query_ticker_yoy, query_industry_aggregation
+from .queries import query_ticker_yoy, query_create_industry_price_aggregation
 
 YOY_METRICS = ['close_price', 'close_price_indexed']
 
@@ -63,7 +63,7 @@ def update_yoy_aggregations(sql_conn):
 def update_industry_aggregations(sql_conn):
     # here we just merge on the industry to each ticker and then aggregate:
     cur = sql_conn.cursor()
-    cur.execute(query_industry_aggregation)
+    cur.execute(query_create_industry_price_aggregation)
     cur.close()
     return
 
@@ -83,3 +83,15 @@ def insert_or_ignore(cursor, table, dataframe):
     placeholders = ", ".join(["?"] * len(dataframe.columns))
     sql = f"INSERT OR IGNORE INTO {table} ({columns_str}) VALUES ({placeholders})"
     cursor.executemany(sql, dataframe.to_records(index=False).tolist())
+
+
+def fetch_table_data(sql_conn, table_name, date: str = None):
+    # Use string formatting to dynamically set the table name
+    query = f"SELECT * FROM {table_name}"
+    if date:
+        query = f"SELECT * FROM {table_name} where date >= {date}"
+
+    # Execute the query and load into a DataFrame
+    df = pd.read_sql_query(query, sql_conn)
+
+    return df

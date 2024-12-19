@@ -1,5 +1,5 @@
 from db import initialize_db_connection, close_db
-
+import os
 
 def create_company_table(conn):
     cur = conn.cursor()
@@ -110,7 +110,12 @@ def create_cashflow_statement(conn):
 
 def create_tickers_most_recent_metrics(conn):
     # This is taken from the most recent data for the ticker:
+    # TODO delete and remake - should look up how to do migrations i guess
+
     cur = conn.cursor()
+    # query_drop = "DROP TABLE IF EXISTS ticker_most_recent_metric_data;"
+    # cur.execute(query_drop)
+
     query = """
         CREATE TABLE IF NOT EXISTS ticker_most_recent_metric_data (
             ticker TEXT NOT NULL PRIMARY KEY,
@@ -121,7 +126,8 @@ def create_tickers_most_recent_metrics(conn):
             debt_to_equity_ratio REAL,
             profit_margin REAL,
             enterpriseToEbitda REAL,
-            latest_eps REAL 
+            latest_eps REAL,
+            enterprise_value REAL 
         )
     """
     cur.execute(query)
@@ -167,11 +173,11 @@ def create_industry_aggregated_time_series_table(conn):
     cur = conn.cursor()
     query = """
         CREATE TABLE IF NOT EXISTS industry_time_series (
-            industry TEXT NOT NULL,
+            sub_industry TEXT NOT NULL,
             date TEXT NOT NULL,
             industry_close_price REAL,
-            industry_close_price_indexed REAL
-            PRIMARY KEY (industry, date)
+            industry_close_price_indexed REAL,
+            PRIMARY KEY (sub_industry, date)
         )
     """
     cur.execute(query)
@@ -212,8 +218,9 @@ def create_data_record_table(conn):
 
 if __name__ == '__main__':
     # Script to create tables:
-    db_name = "comparison_tool.db"
-    db_conn = initialize_db_connection(db_name)
+    db_folder = os.path.join(os.path.dirname(__file__), "..", "comparison_tool")
+    db_path = os.path.join(db_folder, "comparison_tool.db")
+    db_conn = initialize_db_connection(db_path)
     # create_company_table(db_conn)  # done
     # create_ticker_time_series_table(db_conn)  # done
     # # TODO create this table next:
@@ -224,6 +231,7 @@ if __name__ == '__main__':
     # create_ticker_ts_yoy(db_conn)
     # create_data_record_table(db_conn)
     # create_tickers_most_recent_metrics(db_conn)
+    # create_industry_aggregated_time_series_table(db_conn)
 
     # print the names of all tables in the db:
     cursor = db_conn.cursor()
@@ -233,4 +241,4 @@ if __name__ == '__main__':
     for table in tables:
         print(f'table name: {table[1]}')
     cursor.close()
-    close_db(db_conn, db_name)
+    close_db(db_conn, db_path)

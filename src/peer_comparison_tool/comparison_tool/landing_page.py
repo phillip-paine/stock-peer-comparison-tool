@@ -17,7 +17,7 @@ def create_card(title, content):
 
 
 # Function to get the layout for the Landing Page
-def get_landing_page_layout_v2(dat: Dict[str, Dict[str, Any]]):
+def get_landing_page_layout_v2():
     app_layout = html.Div([
         # Header
         dbc.NavbarSimple(
@@ -38,7 +38,7 @@ def get_landing_page_layout_v2(dat: Dict[str, Dict[str, Any]]):
                         dbc.NavLink("Quarterly Reports", href="/quarterly-report-ts-data", active="exact"),
                         dbc.NavLink("Yearly Balance Statememt", href="/balance-sheet-report-ts-data", active="exact"),
                         dbc.NavLink("Company Overviews", href="/company-stock-overview-data", active="exact"),
-                        dbc.NavLink("Discounted Cashflow Model", href="/company-discounted-cashflow-calculation", active="exact"),
+                        # dbc.NavLink("Discounted Cashflow Model", href="/company-discounted-cashflow-calculation", active="exact"),
                     ],
                     vertical=True,
                     pills=True,
@@ -97,12 +97,12 @@ def get_landing_page_layout():
                     color="primary",
                     style={'backgroundColor': colors['primary']}
                 ),
-                dbc.Button(
-                    "Discounted Cash Flow Evaluation",
-                    id="company-discounted-cashflow-calculation-page-button",
-                    color="primary",
-                    style={'backgroundColor': colors['primary']}
-                ),
+                # dbc.Button(
+                #     "Discounted Cash Flow Evaluation",
+                #     id="company-discounted-cashflow-calculation-page-button",
+                #     color="primary",
+                #     style={'backgroundColor': colors['primary']}
+                # ),
             ], className="text-center", style={'marginTop': '20px'})
         ], style={'backgroundColor': colors['background'], 'color': colors['text']})
     ])

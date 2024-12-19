@@ -5,7 +5,7 @@ import os
 from data.constants import TICKERS
 from data.main import create_ticker_data, create_aggregations_data
 from comparison_tool.app import create_app
-from data.db import initialize_db_connection
+from data.db import initialize_db_connection, close_db
 from data.db_utils import check_ticker_data_recency
 
 from typing import Optional, Dict
@@ -42,6 +42,7 @@ def main_run(tickers_subgics_map: Optional[Dict[str, str]] = None):
     # then we only need to pass the sqlite connection to the create_app then we can query data when we need it:
     app = create_app(sql_conn)
     app.run_server(debug=True)
+    close_db(sql_conn, db_path)
     return
 
 
