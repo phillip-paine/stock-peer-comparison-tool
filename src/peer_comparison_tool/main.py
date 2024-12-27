@@ -32,12 +32,11 @@ def main_run(tickers_subgics_map: Optional[Dict[str, str]] = None):
         print(e)
         return
 
-    # create new data and write to tables:
-    if ticker_subgics_retrieve_data_map is not None:
-        create_ticker_data(ticker_subgics_retrieve_data_map, sql_conn)
-
-    # rerun aggregations, clustering, other ML models etc. if needed to store updated summaries and features:
-    create_aggregations_data(sql_conn, tickers_subgics_map)
+    # fetch new data,transform and write to tables then update aggregations such as industry time series etc:
+    if ticker_subgics_retrieve_data_map:
+        create_ticker_data(ticker_subgics_retrieve_data_map, sql_conn)  # TODO uncomment
+        # rerun aggregations, clustering, other ML models etc. if needed to store updated summaries and features:
+        create_aggregations_data(sql_conn, tickers_subgics_map)
 
     # then we only need to pass the sqlite connection to the create_app then we can query data when we need it:
     app = create_app(sql_conn)

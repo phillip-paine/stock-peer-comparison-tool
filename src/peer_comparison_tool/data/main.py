@@ -8,7 +8,7 @@ from .retriever import RetrieveStockData
 from .constants import TICKERS
 from .utils import create_valuation_clusters
 
-from .db_utils import update_yoy_aggregations, update_industry_aggregations, insert_or_replace, insert_or_ignore
+from .db_utils import update_ticker_yoy_aggregations, update_industry_aggregations, insert_or_replace, insert_or_ignore
 from .queries import recent_metrics_sector_query
 
 
@@ -217,7 +217,7 @@ def create_aggregations_data(conn, ticker_subindustry_map: Dict[str, str]):
         conn.commit()
 
     # YoY Aggregations:
-    update_yoy_aggregations(conn)
+    update_ticker_yoy_aggregations(conn)
 
     # Industry Aggregation:
     update_industry_aggregations(conn)

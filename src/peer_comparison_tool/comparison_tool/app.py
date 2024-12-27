@@ -41,16 +41,39 @@ def create_app(db_conn):
     # Retrieve data from connection:  # TODO only retrieve what we need, do this later.
     snapshot_recent_metrics = fetch_table_data(db_conn, 'ticker_most_recent_metric_data')
     company_info = fetch_table_data(db_conn, 'company_info')
-    snapshot_recent_metrics = pd.merge(snapshot_recent_metrics, company_info, on='ticker')
+    snapshot_recent_metrics = pd.merge(snapshot_recent_metrics, company_info, on='ticker', how='left')
     # TODO move this elsewhere:
     snapshot_recent_metrics['market_cap_MM'] = snapshot_recent_metrics['market_cap'].clip(lower=1) / 1_000_000
+    data_cluster = fetch_table_data(sql_conn=db_conn, table_name='cluster_table', most_recent=True)
+    data_cluster.rename(columns={"cluster_membership": "label"}, inplace=True)
+    snapshot_recent_metrics = pd.merge(snapshot_recent_metrics, data_cluster[['ticker', 'label']], on=['ticker'])
     # snapshot_recent_metrics = pd.read_sql_query(sql=get_table_data_query, con=db_conn, params=['ticker_most_recent_metric_data'])
     # we can calculate EV here from stock_price X number of shareholds
     latest_ev_data = snapshot_recent_metrics[['ticker', 'enterprise_value']].set_index(keys='ticker')
 
     # Create the home page data:
     ticker_series_data = fetch_table_data(db_conn, 'ticker_time_series')
+    ticker_series_data = pd.merge(ticker_series_data, company_info, on='ticker', how='left')
+    ticker_metric_yoy_data = fetch_table_data(db_conn, 'ticker_metrics_yoy')
+    ticker_metric_yoy_data = pd.merge(ticker_metric_yoy_data, company_info, on='ticker', how='left')
+    ticker_series_yoy_data = fetch_table_data(db_conn, 'ticker_ts_yoy')
+    ticker_series_data = pd.merge(ticker_series_data, ticker_series_yoy_data, on=['ticker', 'date'], how='left')
+    ticker_series_data.sort_values(by=['ticker', 'date'], ascending=True, inplace=True)
+    ticker_metric_yoy_data.sort_values(by=['ticker', 'date'], ascending=True, inplace=True)
+
     # ticker_series_data = pd.read_sql_query(sql=get_table_data_query, con=db_conn, params=['ticker_time_series'])
+    # And the industry_series_data (aggregated from ticker data)
+
+    industry_series_data = fetch_table_data(db_conn, 'industry_time_series')
+    industry_series_yoy_data = fetch_table_data(db_conn, 'industry_time_series_yoy')
+    industry_series_data = pd.merge(industry_series_data, industry_series_yoy_data, on=['sub_industry', 'date'], how='left')
+    industry_metrics_yoy_data = fetch_table_data(db_conn, 'industry_metrics_yoy')
+    industry_series_data.sort_values(by=['sub_industry', 'date'], ascending=True, inplace=True)
+    # TODO we need to standardise the index column:
+    industry_series_data['first_indexed_value'] = industry_series_data.groupby(['sub_industry'])['industry_close_price_indexed'].transform('first')
+    industry_series_data['industry_close_price_indexed'] = industry_series_data['industry_close_price_indexed'] / industry_series_data['first_indexed_value'] * 100
+    industry_metrics_yoy_data.sort_values(by=['sub_industry', 'date'], ascending=True, inplace=True)
+
     # don't need this anymore? TODO remove if we dont
     # sub_industries = [key.split(":")[0] for key in ticker_series_data.keys() if key.startswith("Industry Index")]
     # overview_data = {}
@@ -59,11 +82,13 @@ def create_app(db_conn):
     #     overview_data[sub_industry] = sub_industry_map
 
     # Quarterly-financials:
-    qfin_data = fetch_table_data(db_conn, 'quarterly_financial_data')
+    qfin_data = fetch_table_data(db_conn, 'quarterly_financial_data', force_date_conversion=True)
+    qfin_data = pd.merge(qfin_data, company_info, on=['ticker'], how='left')
     # qfin_data = pd.read_sql_query(sql=get_table_data_query, con=db_conn, params=['quarterly_financial_data'])
 
     # Balance Sheet financials:
-    bs_data = fetch_table_data(db_conn, 'balance_sheet_data')
+    bs_data = fetch_table_data(db_conn, 'balance_sheet_data', force_date_conversion=True)
+    bs_data = pd.merge(bs_data, company_info, on=['ticker'], how='left')
     # bs_data = pd.read_sql_query(sql=get_table_data_query, con=db_conn, params=['balance_sheet_data'])
 
     # Callback to update the page content based on URL
@@ -77,7 +102,8 @@ def create_app(db_conn):
         elif pathname == '/balance-sheet-report-ts-data':
             return get_balance_sheet_report_page_layout(bs_data)
         elif pathname == '/company-stock-overview-data':
-            return get_individual_company_overview_page_layout(ticker_series_data)
+            return get_individual_company_overview_page_layout(ticker_series_data,
+                                                               industry_series_data, industry_metrics_yoy_data)
         # TODO add cashflow df back in
         # elif pathname == '/company-discounted-cashflow-calculation':
         #     return get_discounted_cashflow_model_page_layout(cashflow_map, latest_ev_data)
@@ -115,7 +141,8 @@ def create_app(db_conn):
     register_comparison_callbacks(app, snapshot_recent_metrics)
     register_quarterly_report_page_callbacks(app, qfin_data)
     register_balance_sheet_report_page_callbacks(app, bs_data)
-    register_individual_company_overview_callback(app, ticker_series_data)
+    register_individual_company_overview_callback(app, company_info, ticker_series_data, ticker_metric_yoy_data,
+                                                  industry_series_data, industry_metrics_yoy_data)
     # register_discounted_cashflow_model_page_callbacks(app, cashflow_map, latest_ev_data)
 
     # Callback to handle the "Return to Home" button click

@@ -9,7 +9,7 @@ from .constants import DOWNLOAD_DIR
 
 
 def get_balance_sheet_report_page_layout(data):
-    unique_ticker_list = list(data['ticker'].unique)
+    unique_ticker_list = list(data['ticker'].unique())
     return dbc.Container([
         dbc.Row([
             dbc.Col(
@@ -24,7 +24,7 @@ def get_balance_sheet_report_page_layout(data):
                 html.Label("Select Sectors:", style={'color': colors['text']}),
                 dcc.Dropdown(
                     id='sector-dropdown',
-                    options=[{'label': sector, 'value': sector} for sector in data['sector'].unique()],
+                    options=[{'label': sector, 'value': sector} for sector in data['sub_industry'].unique()],
                     value=[data['sector'].iloc[0]],  # Default selection - jut pick first sector? or leave blank?
                     multi=True,
                     searchable=True,
@@ -87,7 +87,7 @@ def register_balance_sheet_report_page_callbacks(app, data):
             filtered_data = data
         else:
             # Filter data based on selected sectors
-            filtered_data = data[data['sector'].isin(selected_sectors)]
+            filtered_data = data[data['sub_industry'].isin(selected_sectors)]
 
         filtered_data.sort_values(by=['date'], inplace=True)
 

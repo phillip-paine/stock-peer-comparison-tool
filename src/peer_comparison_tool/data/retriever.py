@@ -151,9 +151,12 @@ class RetrieveStockData:
         return df
 
     def get_stock_level_data(self):
-        stock_history = self.stock.history(period='1y')
+        stock_history = self.stock.history(period='2y')
+        if stock_history.empty:
+            stock_history = self.stock.history(period='1y')  # Just get the last year if we cant get 2yr for some reason
         stock_history.reset_index(inplace=True)
         stock_history['Date'] = pd.to_datetime(stock_history['Date']).dt.tz_localize(None)
+        stock_history['Date'] = stock_history['Date'].dt.date
         stock_history['Close Indexed'] = stock_history['Close'] / stock_history['Close'].iloc[0] * 100
         stock_history['ticker'] = self.stock_ticker
         self.stock_level_data_store['stock_price_data'] = stock_history[['ticker', 'Date', 'Close', 'Close Indexed']]

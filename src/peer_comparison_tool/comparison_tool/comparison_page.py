@@ -7,7 +7,8 @@ from .layout import create_container, create_header
 from .styles import colors
 import pandas as pd
 
-DISPLAY_COLS = ['name', 'sector', 'price_eps_ratio', 'market_cap_MM', 'enterpriseToEbitda', 'latest_eps', 'profit_margin']
+DISPLAY_COLS = ['name', 'industry', 'sub_industry', 'price_eps_ratio', 'market_cap_MM', 'enterpriseToEbitda',
+                'latest_eps', 'profit_margin']
 NOT_METRICS = ['name', 'ticker', 'industry', 'sector', 'subsector', 'label', 'market_cap_string', 'market_cap']
 
 
@@ -22,7 +23,7 @@ def get_comparison_page_layout(data: pd.DataFrame):
                 html.Label("Select GICS Sub-industry:", style={'color': colors['text']}),
                 dcc.Dropdown(
                     id='sector-dropdown',
-                    options=[{'label': sector, 'value': sector} for sector in data['industry'].unique()],
+                    options=[{'label': sector, 'value': sector} for sector in data['sub_industry'].unique()],
                     value=[data['sub_industry'].iloc[0]],  # Default selection - jut pick first sector? or leave blank?
                     multi=True,
                     searchable=True,
@@ -223,12 +224,14 @@ def register_comparison_callbacks(app: dash.Dash, data: pd.DataFrame):
         if not selected_sectors:
             # If no sectors selected, show all data
             filtered_data = data
+            # Lets drop rows with any NA for now: # TODO fix me later
+            filtered_data.dropna(how='any', inplace=True)
         else:
             # Filter data based on selected sectors
             filtered_data = data[data['sub_industry'].isin(selected_sectors)]
+            filtered_data.dropna(how='any', inplace=True)
 
         # Update DataTable
-
         table_data = filtered_data.sort_values(by=['price_eps_ratio'], ascending=False).to_dict('records')
 
         # Create bar chart figure

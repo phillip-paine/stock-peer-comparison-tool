@@ -29,7 +29,7 @@ def get_quarterly_report_page_layout(data):
                 html.Label("Select Sectors:", style={'color': colors['text']}),
                 dcc.Dropdown(
                     id='sector-dropdown',
-                    options=[{'label': sector, 'value': sector} for sector in data['sector'].unique()],
+                    options=[{'label': sector, 'value': sector} for sector in data['sub_industry'].unique()],
                     value=[data['sector'].iloc[0]],  # Default selection - jut pick first sector? or leave blank?
                     multi=True,
                     searchable=True,
@@ -94,7 +94,7 @@ def register_quarterly_report_page_callbacks(app, data):
             filtered_data = data
         else:
             # Filter data based on selected sectors
-            filtered_data = data[data['sector'].isin(selected_sectors)]
+            filtered_data = data[data['sub_industry'].isin(selected_sectors)]
 
         filtered_data.sort_values(by=['date'], inplace=True)
 
