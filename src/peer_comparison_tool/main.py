@@ -6,9 +6,11 @@ from data.constants import TICKERS
 from data.main import create_ticker_data, create_aggregations_data
 from comparison_tool.app import create_app
 from data.db import initialize_db_connection, close_db
-from data.db_utils import check_ticker_data_recency
+from data.db_utils import check_ticker_data_recency, check_asset_data_recency, update_other_asset_classes
 
 from typing import Optional, Dict
+
+from src.peer_comparison_tool.data.retriever import RetrieveEconomicsData
 
 db_folder = os.path.join(os.path.dirname(__file__), "comparison_tool")
 db_path = os.path.join(db_folder, "comparison_tool.db")
@@ -37,6 +39,13 @@ def main_run(tickers_subgics_map: Optional[Dict[str, str]] = None):
         create_ticker_data(ticker_subgics_retrieve_data_map, sql_conn)  # TODO uncomment
         # rerun aggregations, clustering, other ML models etc. if needed to store updated summaries and features:
         create_aggregations_data(sql_conn, tickers_subgics_map)
+
+    asset_retriever = RetrieveEconomicsData()
+    for asset in list(asset_retriever.non_stock_entities.keys()):
+        if check_asset_data_recency(sql_conn, asset):
+            del asset_retriever.non_stock_entities[asset]  # remove from the map
+
+    update_other_asset_classes(asset_retriever, sql_conn)
 
     # then we only need to pass the sqlite connection to the create_app then we can query data when we need it:
     app = create_app(sql_conn)

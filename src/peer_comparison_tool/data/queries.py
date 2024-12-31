@@ -23,8 +23,8 @@ query_create_industry_price_yoy_aggregation = """
         ON t1.sub_industry = t2.sub_industry AND t1.date = t2.date_lagged
     ),
     temp_industry_price_yoy as (
-        SELECT sub_industry, date, (industry_close_price / close_price_year - 1) as industry_close_price_yoy, 
-            (industry_close_price_indexed / close_price_indexed_year - 1) as industry_close_price_indexed_yoy
+        SELECT sub_industry, date, (industry_close_price / close_price_year - 1)*100 as industry_close_price_yoy, 
+            (industry_close_price_indexed / close_price_indexed_year - 1)*100 as industry_close_price_indexed_yoy
         FROM industry_price_year_lag
     ) 
     INSERT OR IGNORE INTO industry_time_series_yoy (sub_industry, date, industry_close_price_yoy, industry_close_price_indexed_yoy) 
@@ -58,8 +58,8 @@ query_ticker_time_series_yoy = """
         ON t1.ticker = t2.ticker AND t1.date = date_lagged
     ),
     temp_ticker_price_yoy as (
-        SELECT ticker, date, close_price / close_price_year - 1 as close_price_yoy, 
-            close_price_indexed / close_price_indexed_year - 1 as close_price_indexed_yoy
+        SELECT ticker, date, (close_price / close_price_year - 1)*100 as close_price_yoy, 
+            (close_price_indexed / close_price_indexed_year - 1)*100 as close_price_indexed_yoy
         FROM ticker_price_year_lag
     ) 
     INSERT OR IGNORE INTO ticker_ts_yoy (ticker, date, close_price_yoy, close_price_indexed_yoy) 

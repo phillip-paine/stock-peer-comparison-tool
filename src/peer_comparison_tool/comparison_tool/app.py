@@ -6,7 +6,7 @@ import dash_bootstrap_components as dbc
 from typing import Dict, Any
 
 # from .layout import create_container
-from .landing_page import get_landing_page_layout_v2
+from .landing_page import get_landing_page_layout_v2, register_landing_page_data_callbacks
 from .comparison_page import get_comparison_page_layout, register_comparison_callbacks
 from .company_quarterly_report_page import get_quarterly_report_page_layout, register_quarterly_report_page_callbacks
 from .company_balance_sheet_report_page import get_balance_sheet_report_page_layout, register_balance_sheet_report_page_callbacks
@@ -37,6 +37,7 @@ def create_app(db_conn):
     ])
 
     # TODO abstract this data prelims away from this function
+    economic_data = fetch_table_data(db_conn, 'asset_class_time_series')
 
     # Retrieve data from connection:  # TODO only retrieve what we need, do this later.
     snapshot_recent_metrics = fetch_table_data(db_conn, 'ticker_most_recent_metric_data')
@@ -108,7 +109,7 @@ def create_app(db_conn):
         # elif pathname == '/company-discounted-cashflow-calculation':
         #     return get_discounted_cashflow_model_page_layout(cashflow_map, latest_ev_data)
         else:
-            return get_landing_page_layout_v2()  # TODO add high-level data here?
+            return get_landing_page_layout_v2(economic_data=economic_data)  # TODO add high-level data here?
 
     # Callback for navigation buttons
     @app.callback(Output('url', 'pathname'),
@@ -138,6 +139,7 @@ def create_app(db_conn):
         else:
             return '/'
 
+    register_landing_page_data_callbacks(app, economic_data)
     register_comparison_callbacks(app, snapshot_recent_metrics)
     register_quarterly_report_page_callbacks(app, qfin_data)
     register_balance_sheet_report_page_callbacks(app, bs_data)

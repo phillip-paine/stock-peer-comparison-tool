@@ -1,7 +1,7 @@
 import sqlite3
 import pandas as pd
 import numpy as np
-from datetime import datetime
+from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
 
 from .queries import query_ticker_time_series_yoy, query_create_industry_price_aggregation, \
@@ -53,6 +53,23 @@ def check_ticker_data_recency(conn, ticker) -> bool:
         return True
 
 
+def check_asset_data_recency(conn, ticker) -> bool:
+    cur = conn.cursor()
+    cur.execute("""SELECT MAX("version date") from data_storage_record where ticker = ?""", (ticker, ))
+    result = cur.fetchone()
+    cur.close()
+
+    # today date
+    date_today = datetime.now().date()
+    if result[0] is None or (datetime.strptime(result[0], "%Y-%m-%d").date() < date_today):
+        # print("No recent data versions found - retrieving new data")
+        return False
+
+    else:
+        # print("Recent data found - not retrieving new data")
+        return True
+
+
 def update_ticker_yoy_aggregations(sql_conn):
     cur = sql_conn.cursor()
     cur.execute(query_ticker_time_series_yoy)
@@ -65,7 +82,7 @@ def update_ticker_yoy_aggregations(sql_conn):
     df_quarter_yoy = pd.merge(df_quarter, df_quarter_lagged, on=['ticker', 'quarter_reporting'], suffixes=('', '_lagged'))
     yoy_metric_cols = ['Basic EPS', 'Operating Income', 'Net Income', 'Gross Margin', 'Operating Margin', 'Net Margin', 'EBITDA Margin']
     for metric_col in yoy_metric_cols:
-        df_quarter_yoy[f'{metric_col} YoY'] = np.where(df_quarter_yoy[f'{metric_col}_lagged'] != 0, df_quarter_yoy[f'{metric_col}'] / df_quarter_yoy[f'{metric_col}_lagged'] - 1, 0)
+        df_quarter_yoy[f'{metric_col} YoY'] = np.where(df_quarter_yoy[f'{metric_col}_lagged'] != 0, (df_quarter_yoy[f'{metric_col}'] / df_quarter_yoy[f'{metric_col}_lagged'] - 1) * 100, 0)
     yoy_metric_cols = [col + ' YoY' for col in yoy_metric_cols]
     insert_or_ignore(cur, 'ticker_metrics_yoy', df_quarter_yoy[['ticker', 'date', 'quarter_reporting'] + yoy_metric_cols])
     cur.close()
@@ -87,9 +104,25 @@ def update_industry_aggregations(sql_conn):
     df_quarter_yoy = pd.merge(df_quarter, df_quarter_lagged, on=['sub_industry', 'quarter_reporting'], suffixes=('', '_lagged'))
     yoy_metric_cols = ['Basic EPS', 'Operating Income', 'Net Income', 'Gross Margin', 'Operating Margin', 'Net Margin', 'EBITDA Margin']
     for metric_col in yoy_metric_cols:
-        df_quarter_yoy[f'{metric_col} YoY'] = np.where(df_quarter_yoy[f'{metric_col}_lagged'] != 0, df_quarter_yoy[f'{metric_col}'] / df_quarter_yoy[f'{metric_col}_lagged'] - 1, 0)
+        df_quarter_yoy[f'{metric_col} YoY'] = np.where(df_quarter_yoy[f'{metric_col}_lagged'] != 0, (df_quarter_yoy[f'{metric_col}'] / df_quarter_yoy[f'{metric_col}_lagged'] - 1) * 100, 0)
     yoy_metric_cols = [col + ' YoY' for col in yoy_metric_cols]
     insert_or_ignore(cur, 'industry_metrics_yoy', df_quarter_yoy[['sub_industry', 'date', 'quarter_reporting'] + yoy_metric_cols])
+    cur.close()
+    return
+
+
+def update_other_asset_classes(retriever, conn):
+    cur = conn.cursor()
+    if retriever.non_stock_entities:
+        df = retriever.retrieve_economic_data()
+        insert_or_ignore(cur, 'asset_class_time_series', df)
+    record_data_cols = ['ticker', 'version date']
+    record_data_saved = pd.DataFrame(
+        {'ticker': list(retriever.non_stock_entities.keys()),
+         'version date': [date.today().strftime("%Y-%m-%d")]*len(list(retriever.non_stock_entities.keys()))}
+    )
+    insert_or_ignore(cur, 'data_storage_record', record_data_saved[record_data_cols])
+    conn.commit()
     cur.close()
     return
 

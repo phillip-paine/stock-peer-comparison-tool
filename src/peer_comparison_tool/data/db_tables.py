@@ -43,6 +43,29 @@ def create_ticker_time_series_table(conn):
     print('Create ticker time series table')
 
 
+def create_asset_class_ts_table(conn):
+    cur = conn.cursor()
+
+    # query_drop = "DROP TABLE IF EXISTS asset_class_time_series;"
+    # cur.execute(query_drop)
+
+    query = """
+        CREATE TABLE IF NOT EXISTS asset_class_time_series (
+            ticker TEXT NOT NULL,
+            date TEXT NOT NULL,
+            AssetClass TEXT,
+            close_price REAL,
+            close_price_indexed REAL,
+            close_price_yoy REAL,
+            PRIMARY KEY(ticker, date)
+        )
+    """
+    cur.execute(query)
+    conn.commit()
+    cur.close()
+    print('Create asset class time series table')
+
+
 def create_quarterly_report_financial_data(conn):
     cur = conn.cursor()
 
@@ -358,6 +381,7 @@ if __name__ == '__main__':
     # create_ticker_report_yoy_data(db_conn)
     # create_industry_report_metrics_data(db_conn)
     # create_industry_report_yoy_data(db_conn)
+    create_asset_class_ts_table(db_conn)
 
     # print the names of all tables in the db:
     cursor = db_conn.cursor()

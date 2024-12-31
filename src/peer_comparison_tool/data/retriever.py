@@ -11,6 +11,67 @@ class DataRetrievalError(Exception):
     pass
 
 
+class RetrieveEconomicsData:
+    def __init__(self):
+        self.commodities = {"GC=F": "GoldFutures", "BZ=F": "CrudeOilFutures", "NG=F": "NaturalGasFutures", "ZW=F": "WheatFutures"}
+        self.index_funds = {"^GSPC": "S&P500_Index", "^DJI": "DowJones_Index", "^IXIC": "NASDAQ_Index", "^RUT": "Russell2000_Index"}
+        self.equity_traded_funds = {"SPY": "S&P500_ETF", "QQQ": "NASDAQ_ETF", "IWM": "Russell2000_ETF", "XLK": "TechSector",
+                                    "XLF": "Financial_Sector", "XLE": "Energy_Sector", "XLV": "HealthCare_Sector",
+                                    "XLY": "ConsumerDiscretionary_Sector"}
+        self.currency_exchange = {"EURUSD=X": "EuroUSD_fx"}
+        self.non_stock_entities = self.commodities | self.index_funds | self.equity_traded_funds | self.currency_exchange
+        self.ticker_info = pd.DataFrame({
+            'AssetClass': ['commodity'] * len(list(self.commodities.keys())) + ['index_fund'] * len(list(self.index_funds.keys())) +
+            ['etf'] * len(list(self.equity_traded_funds.keys())) + ['fx'] * len(list(self.currency_exchange.keys())),
+            'ticker': list(self.commodities.values()) + list(self.index_funds.values()) + list(self.equity_traded_funds.values()) + list(self.currency_exchange.values())
+        })
+
+    def retrieve_economic_data(self):
+        # Fetch data
+        df = yf.download(list(self.non_stock_entities.keys()), period='2y', interval='1d')
+        df.columns = ['_'.join(col).strip() for col in df.columns.values]
+        close_cols = [c for c in df.columns if c.startswith("Close_")]
+        df = df[close_cols]
+        df.fillna(method='bfill', inplace=True)
+        # 1. create index columns:
+        df_index = df.copy()
+
+        for col in close_cols:
+            first_value = df_index[col].iloc[0]
+            df_index[col] = df_index[col] / first_value * 100
+        df_index = df_index[close_cols]
+        df_index = self._create_melted_dataframe(df_index, close_cols, "_indexed")
+        df_index.drop(columns=['AssetClass'], inplace=True)
+
+        # 2. yoy columns:
+        df_plus_year = df.copy()
+        df_plus_year = self._create_melted_dataframe(df_plus_year, close_cols, "_yoy")
+        df_plus_year['date_lagged'] = df_plus_year['date'] + pd.DateOffset(years=1)
+        df_plus_year['date_lagged'] = pd.to_datetime(df_plus_year['date_lagged']).dt.date
+        df_plus_year = pd.merge(df_plus_year.drop(columns=['date_lagged']),
+                                df_plus_year.drop(columns=['date', 'AssetClass']), left_on=['ticker', 'date'],
+                                right_on=['ticker', 'date_lagged'], how='inner', suffixes=('', '_lagged'))
+        df_plus_year['close_price_yoy'] = (df_plus_year['close_price_yoy'] / df_plus_year['close_price_yoy_lagged'].clip(lower=1) - 1) * 100
+        df_plus_year = df_plus_year[['date', 'ticker', 'close_price_yoy']]
+
+        # 3. original series columns:
+        df = self._create_melted_dataframe(df, close_cols, "")
+
+        # Join all columns together:
+        df = pd.merge(df, df_plus_year, on=['ticker', 'date'], how='outer')
+        df = pd.merge(df, df_index, on=['ticker', 'date'], how='outer')
+
+        return df
+
+    def _create_melted_dataframe(self, df, close_cols, value_column_append: str = ""):
+        column_map = {k: self.non_stock_entities[k.split("e_")[1]] for k in close_cols}
+        df.rename(columns=column_map, inplace=True)
+        df['date'] = pd.to_datetime(df.index).date
+        df = pd.melt(df, id_vars=['date'], var_name='ticker', value_name=f'close_price{value_column_append}')
+        df = pd.merge(df, self.ticker_info, on='ticker')
+        return df
+
+
 class RetrieveStockData:
     # Retrieve one stock ticker (info, history etc.) and create a small number of keys metrics with latest yfinance dat
     def __init__(self, stock_ticker: str):
@@ -109,6 +170,9 @@ class RetrieveStockData:
 
     def get_quarterly_financials_app_data(self):
         try:
+            # check if any missing self.qfin_columns and if so create colum of NaN values (i/e. missing):
+            for col in [c for c in self.qfin_columns not in self.quarterly_finances.columns]:
+                self.quarterly_finances[col] = float('nan')  # Add missing column with NaN values
             df = self.quarterly_finances.loc[self.qfin_columns]
         except KeyError as e:
             print(f"{e}: No quarterly financial statements for {self.stock_ticker}")
@@ -185,6 +249,9 @@ class RetrieveStockData:
         df = self._df_cashflow.transpose()
         df.sort_index(inplace=True)
         df['ticker'] = self.stock_ticker
+        # check that all of self.cashflow_columns are in the dataset, and if not set to NaN (i.e missing)
+        for col in [c for c in self.cashflow_columns not in df.columns]:
+            df[col] = float('nan')  # Add missing column with NaN values
         return df[self.cashflow_columns]
 
     def retrieve_stock_info(self):
@@ -222,11 +289,14 @@ def write_security_stock_ticker_data() -> None:
 
 
 def working_example():
-    example_ticker = "AAPL"
-    stock_retriever = RetrieveStockData(example_ticker)
-    print(f'Key stock metadata info for ticker {example_ticker}: {stock_retriever.stock_info_key}')
+    # example_ticker = "AAPL"
+    # stock_retriever = RetrieveStockData(example_ticker)
+    # print(f'Key stock metadata info for ticker {example_ticker}: {stock_retriever.stock_info_key}')
+    data_retriever = RetrieveEconomicsData()
+    data = data_retriever.retrieve_economic_data()
+    print(f'Data retrieved.')
 
 
 if __name__ == '__main__':
     working_example()
-    write_security_stock_ticker_data()
+    # write_security_stock_ticker_data()
