@@ -33,6 +33,10 @@ def create_ticker_data(tickers_info_map, sql_connection):
     tickers_list = list(tickers_info_map.keys())
     for ticker, subindustry in tickers_info_map.items():
         get_stock_data = RetrieveStockData(ticker)
+        if not get_stock_data.try_stock_ticker():
+            # remove ticker and pass loop
+            tickers_list = [t for t in tickers_list if t != ticker]
+            continue
 
         # Company Info Data:
         ticker_overview = get_stock_data.add_stock_overview_metrics_to_key_metrics()
@@ -86,7 +90,9 @@ def create_ticker_data(tickers_info_map, sql_connection):
 
         # if get_stock_data.stock_info_key is not None:
         #     click.echo(f"Key stock info for {ticker}: {get_stock_data.stock_info_key}")
-
+    if not tickers_list:
+        cur.close()
+        return
     # Create the ticker time series dataframe: the ticker_data_series_map values have a lot of aggregations
     df_ticker_time_series_data = pd.concat(
         [stock_map['stock_price_data'] for stock_map in [ticker_data_series_maps[ticker] for ticker in tickers_list]],

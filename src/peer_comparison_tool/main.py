@@ -70,7 +70,9 @@ def execute_app(tickers):
 if __name__ == '__main__':
     df_ticker_id = pd.read_csv(os.path.expanduser('~/Documents/Code/peer-comparison-tool/data/sp500_security_ticker.csv'))
     # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Utilities"]
-    df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Health Care"]
+    # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Health Care"]
+    # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Financials"]
+    df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Industrials"]
     map_tickers_subindustry = dict(zip(df_ticker_id['Symbol'], df_ticker_id['GICS Sub-Industry']))
     # tickers = ["AAPL", "MSFT", "AMZN", "NVDA", "META"]
     # map_tickers_subindustry = {'ELV': 'Managed Health Care', 'STE': 'Health Care Equipment',

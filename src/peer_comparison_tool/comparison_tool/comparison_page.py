@@ -20,16 +20,28 @@ def get_comparison_page_layout(data: pd.DataFrame):
 
         dbc.Row([
             dbc.Col([
-                html.Label("Select GICS Sub-industry:", style={'color': colors['text']}),
+                html.Label("Select GICS Sector:", style={'color': colors['text']}),
                 dcc.Dropdown(
                     id='sector-dropdown',
-                    options=[{'label': sector, 'value': sector} for sector in data['sub_industry'].unique()],
-                    value=[data['sub_industry'].iloc[0]],  # Default selection - jut pick first sector? or leave blank?
+                    options=[{'label': sector, 'value': sector} for sector in data['sector'].unique()],
+                    value=[data['sector'].iloc[0]],  # Default selection - jut pick first sector? or leave blank?
                     multi=True,
                     searchable=True,
                     style={'marginBottom': '15px'}
                 )
-            ], width=6),
+            ], width=3),
+            dbc.Col([
+                html.Label("Select GICS Sub-industry:", style={'color': colors['text']}),
+                dcc.Dropdown(
+                    id='sub-sector-dropdown',
+                    # options=[{'label': sector, 'value': sector} for sector in data['sub_industry'].unique()],
+                    # value=[data['sub_industry'].iloc[0]],  # Default selection - jut pick first sector? or leave blank?
+                    multi=True,
+                    searchable=True,
+                    placeholder="Select a sub-industry",
+                    style={'marginBottom': '15px'}
+                )
+            ], width=3),
             dbc.Col([
                 html.Label("Select Comparison Metric:", style={'color': colors['text']}),
                 dcc.Dropdown(
@@ -212,24 +224,40 @@ def register_comparison_callbacks(app: dash.Dash, data: pd.DataFrame):
         return False, False
 
     @app.callback(
-        [dash.dependencies.Output('metrics-table', 'data'),
+        [dash.dependencies.Output('sub-sector-dropdown', 'options'),
+         dash.dependencies.Output('metrics-table', 'data'),
          dash.dependencies.Output('eps-bar-chart', 'figure'),
          dash.dependencies.Output('price-earnings-ratio-chart', 'figure')],
         dash.dependencies.Output('scatter-info-chart', 'figure'),
         [dash.dependencies.Input('sector-dropdown', 'value'),
+         dash.dependencies.Input('sub-sector-dropdown', 'value'),
          dash.dependencies.Input('comparison-metric1-dropdown', 'value'),
          dash.dependencies.Input('comparison-metric2-dropdown', 'value')]
     )
-    def update_graph(selected_sectors, metric_one, metric_two):
-        if not selected_sectors:
+    def update_graph(selected_sector, selected_sub_sectors, metric_one, metric_two):
+        # Update subsector dropdown options
+        if not selected_sector:
+            sub_sector_options = []
+        else:
+            # Filter subsectors based on the selected sector
+            sub_sector_options = data[data['sector'].isin(selected_sector)]['sub_industry'].unique()
+            sub_sector_options = [{'label': sub, 'value': sub} for sub in sub_sector_options]
+
+        # Filter Data for sector and sub_sector
+        if not selected_sector:
             # If no sectors selected, show all data
             filtered_data = data
             # Lets drop rows with any NA for now: # TODO fix me later
             filtered_data.dropna(how='any', inplace=True)
         else:
-            # Filter data based on selected sectors
-            filtered_data = data[data['sub_industry'].isin(selected_sectors)]
-            filtered_data.dropna(how='any', inplace=True)
+            if not selected_sub_sectors:
+                # Filter data based on selected sectors
+                filtered_data = data[data['sector'].isin(selected_sector)]
+                filtered_data.dropna(how='any', inplace=True)
+            else:
+                # Filter data based on selected sub sectors
+                filtered_data = data[data['sub_industry'].isin(selected_sub_sectors)]
+                filtered_data.dropna(how='any', inplace=True)
 
         # Update DataTable
         table_data = filtered_data.sort_values(by=['price_eps_ratio'], ascending=False).to_dict('records')
@@ -267,7 +295,7 @@ def register_comparison_callbacks(app: dash.Dash, data: pd.DataFrame):
 
         fig3.update_traces(textposition='bottom center', marker=dict(size=10, line=dict(width=2, color='DarkSlateGrey')), selector=dict(mode='markers+text'))
 
-        return table_data, fig1, fig2, fig3
+        return sub_sector_options, table_data, fig1, fig2, fig3
 
     @app.callback(
         [dash.dependencies.Output('radar-chart', 'figure')],

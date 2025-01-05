@@ -85,6 +85,13 @@ def create_app(db_conn):
     # Quarterly-financials:
     qfin_data = fetch_table_data(db_conn, 'quarterly_financial_data', force_date_conversion=True)
     qfin_data = pd.merge(qfin_data, company_info, on=['ticker'], how='left')
+    # Get price data for P/E Ratio:
+    qfin_ticker_data = pd.merge(qfin_data[['ticker', 'date']], ticker_series_data[['ticker', 'date', 'close_price']], on=['ticker', 'date'], how='outer')
+    qfin_ticker_data['close_price'] = qfin_ticker_data['close_price'].ffill()
+    qfin_data = pd.merge(qfin_data, qfin_ticker_data[['ticker', 'date', 'close_price']], on=['ticker', 'date'], how='left')
+    del qfin_ticker_data  # remove this time series df
+
+    qfin_data['Price Over EPS'] = qfin_data['close_price'] / qfin_data['Basic EPS']
     # qfin_data = pd.read_sql_query(sql=get_table_data_query, con=db_conn, params=['quarterly_financial_data'])
 
     # Balance Sheet financials:

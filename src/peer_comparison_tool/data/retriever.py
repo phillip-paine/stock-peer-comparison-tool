@@ -93,6 +93,11 @@ class RetrieveStockData:
         self.retrieve_stock_info()
         self._retrieve_recent_metrics()
 
+    def try_stock_ticker(self):
+        if self.balance_sheets.empty or self.quarterly_finances.empty:
+            return False
+        return True
+
     def stock_check_then_retrieve_data(self):
         try:
             self.retrieve_balance_sheet()
@@ -145,9 +150,11 @@ class RetrieveStockData:
         self._df_stock_history = self.stock.history(period="2y")
 
     def _retrieve_recent_metrics(self):
+        trailing_pe = self.stock.info.get('trailingPE')
+        trailing_pe = np.inf if trailing_pe == 'Infinity' else trailing_pe
         self.recent_key_metrics = {'market_cap_string': self.safe_string_format(self.stock.info.get('marketCap')),  # add commas for each k.
                                    'market_cap': self.stock.info.get("marketCap"),
-                                   'price_eps_ratio': self.safe_round(self.stock.info.get('trailingPE'), 2),
+                                   'price_eps_ratio': self.safe_round(trailing_pe, 2),
                                    'price_to_book': self.safe_round(self.stock.info.get('priceToBook'), 2),
                                    'return_on_equity': self.safe_round(self.stock.info.get("returnOnEquity"), 2),
                                    'debt_to_equity_ratio': self.safe_round(self.stock.info.get("debtToEquity"), 2),
@@ -169,12 +176,41 @@ class RetrieveStockData:
         self._df_quarterly = self.stock.quarterly_financials
 
     def get_quarterly_financials_app_data(self):
+        q_fin_rows = self.quarterly_finances.index.to_list()
         try:
             # check if any missing self.qfin_columns and if so create colum of NaN values (i/e. missing):
-            for col in [c for c in self.qfin_columns not in self.quarterly_finances.columns]:
-                self.quarterly_finances[col] = float('nan')  # Add missing column with NaN values
+            if 'Basic EPS' not in q_fin_rows:
+                if 'Diluted EPS' in q_fin_rows:
+                    self.quarterly_finances.loc['Basic EPS'] = self.quarterly_finances.loc['Diluted EPS']
+                else:
+                    self.quarterly_finances.loc['Basic EPS'] = float(np.nan)
+
+            if 'EBITDA' not in q_fin_rows:
+                if 'EBIT' in q_fin_rows:
+                    self.quarterly_finances.loc['EBITDA'] = self.quarterly_finances.loc['EBIT']
+                else:
+                    self.quarterly_finances.loc['EBITDA'] = float(np.nan)
+
+            if 'Operating Income' not in q_fin_rows:
+                # EBIT is close to Operating Income generally, but includes Non-Operating Expenses + Income too.
+                if 'EBIT' in q_fin_rows:
+                    self.quarterly_finances.loc['Operating Income'] = self.quarterly_finances.loc['EBIT']
+                else:
+                    self.quarterly_finances.loc['Operating Income'] = float(np.nan)
+
+            if 'Gross Profit' not in q_fin_rows:
+                # If Gross Profit unavailable (because no COGS) then it might be a bank etc.
+                # so we use the Net Interest Income instead (where the Operating Expenses are the COGS)
+                if 'Net Interest Income' in q_fin_rows:
+                    self.quarterly_finances.loc['Gross Profit'] = self.quarterly_finances.loc['Net Interest Income']
+                else:
+                    self.quarterly_finances.loc['Gross Profit'] = float(np.nan)
+
             df = self.quarterly_finances.loc[self.qfin_columns]
         except KeyError as e:
+            print(f"{e}: No quarterly financial statements for {self.stock_ticker}")
+            return pd.DataFrame()
+        except ValueError as e:
             print(f"{e}: No quarterly financial statements for {self.stock_ticker}")
             return pd.DataFrame()
         df = df.astype(float)
@@ -198,17 +234,26 @@ class RetrieveStockData:
         df = df.astype(float)
         df.fillna(value=0.0, inplace=True)
         df = df.transpose()
-        bs_cols = ['OrdinarySharesNumber', 'StockholdersEquity', 'TotalLiabilitiesNetMinorityInterest', 'CurrentAssets']
-        try:
-            df = df[bs_cols].copy()
-        except KeyError as e:
-            print(f"{e}: No balance sheet data for {self.stock_ticker}")
-            return pd.DataFrame()
+
         # processing and creating new insight columns:
-        if 'Inventory' in df.columns:
-            df['Quick Ratio'] = (df['CurrentAssets'] - df['Inventory']) / df['TotalLiabilitiesNetMinorityInterest']
+        if 'CurrentAssets' not in df.columns:
+            # 1. Check if we are dealing with finance institution (repalce QuickRatio with Loan-to-Deposit Ratio)
+            # We just want an industry appropriate measure of liquidity - TODO rename to Liquidity Ratio?
+            df['Blank'] = 0  # used to avoid errors getting data
+            df['CurrentAssets'] = df.get('CashCashEquivalentsAndShortTermInvestments', df.get('CashAndCashEquivalents', df['Blank'])) + \
+                                  df.get('Receivables', df['Blank']) + df.get('TotalLoans', df.get('LoansReceivables', df['Blank']))
+            # using CashAndCashEquivalents/CashCashEquivalentsAndShortTermInvestments,
+            # Receivable and TotalLoans/LoansReceivables,
+        if 'TotalLiabilitiesNetMinorityInterest' not in df.columns:
+            df['TotalLiabilitiesNetMinorityInterest'] = df.get('TotalDeposits', df.get('CustomerDeposits'), df['Blank']) + \
+                                                        df.get('UnearnedPremium', df['Blank']) + \
+                                                        df.get('AccountsPayable', df['Blank'])
+            # UnearendPremium, AccountsPayable, Customer Deposits etc.
         else:
-            df['Quick Ratio'] = df['CurrentAssets'] / df['TotalLiabilitiesNetMinorityInterest']
+            if 'Inventory' in df.columns:
+                df['Quick Ratio'] = (df['CurrentAssets'] - df['Inventory']) / df['TotalLiabilitiesNetMinorityInterest']
+            else:
+                df['Quick Ratio'] = df['CurrentAssets'] / df['TotalLiabilitiesNetMinorityInterest']
 
         df['Equity Ratio'] = (df['CurrentAssets'] - df['TotalLiabilitiesNetMinorityInterest']) / df['OrdinarySharesNumber']
         df['Debt-to-Equity Ratio'] = df['TotalLiabilitiesNetMinorityInterest'] / df['StockholdersEquity']
@@ -236,6 +281,16 @@ class RetrieveStockData:
         for row in income_statement_rows:
             # dates read left to right:
             self.stock_level_data_store[f"{row}_yoy"] = round((income_statement.loc[row, income_statement_cols[0]] / income_statement.loc[row, income_statement_cols[1]]) - 1, 2) * 100
+        if 'Total Expenses' not in income_statement.index.tolist():
+            # Identify rows where the index ends with 'Expenses'
+            expenses_rows = income_statement.filter(like='Expense', axis=0)
+
+            # Sum the rows that end with 'Expenses'
+            total_expenses = expenses_rows.sum()
+
+            # Add the 'Total Expenses' row to the DataFrame
+            income_statement.loc['Total Expenses'] = total_expenses
+
         net_margin_this_year = (income_statement.loc['Total Revenue', income_statement_cols[0]] - income_statement.loc['Total Expenses', income_statement_cols[0]]) / income_statement.loc['Total Expenses', income_statement_cols[0]] * 100
         net_margin_last_year = (income_statement.loc['Total Revenue', income_statement_cols[1]] - income_statement.loc['Total Expenses', income_statement_cols[1]]) / income_statement.loc['Total Expenses', income_statement_cols[1]] * 100
         self.stock_level_data_store['net_margin_yoy'] = round(net_margin_this_year / net_margin_last_year - 1, 2) * 100
@@ -250,7 +305,7 @@ class RetrieveStockData:
         df.sort_index(inplace=True)
         df['ticker'] = self.stock_ticker
         # check that all of self.cashflow_columns are in the dataset, and if not set to NaN (i.e missing)
-        for col in [c for c in self.cashflow_columns not in df.columns]:
+        for col in [c for c in self.cashflow_columns if c not in df.columns]:
             df[col] = float('nan')  # Add missing column with NaN values
         return df[self.cashflow_columns]
 

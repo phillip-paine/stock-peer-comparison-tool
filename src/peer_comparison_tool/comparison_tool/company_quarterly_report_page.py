@@ -46,7 +46,8 @@ def get_quarterly_report_page_layout(data):
                         {'label': 'Operating Margin', 'value': 'Operating Margin'},
                         {'label': 'Net Margin', 'value': 'Net Margin'},
                         {'label': 'EBITDA Margin', 'value': 'EBITDA Margin'},
-                        {'label': 'EPS', 'value': 'Basic EPS'}
+                        {'label': 'EPS', 'value': 'Basic EPS'},
+                        {'label': 'P/E', 'value': 'Price Over EPS'}
                     ],
                     value='Gross Margin',
                     multi=False,
