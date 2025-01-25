@@ -3,6 +3,7 @@ import pandas as pd
 import os
 
 from data.constants import TICKERS
+from comparison_tool.constants import DB_PATH
 from data.main import create_ticker_data, create_aggregations_data
 from comparison_tool.app import create_app
 from data.db import initialize_db_connection, close_db
@@ -12,16 +13,13 @@ from typing import Optional, Dict
 
 from src.peer_comparison_tool.data.retriever import RetrieveEconomicsData
 
-db_folder = os.path.join(os.path.dirname(__file__), "comparison_tool")
-db_path = os.path.join(db_folder, "comparison_tool.db")
-
 
 def main_run(tickers_subgics_map: Optional[Dict[str, str]] = None):
     if tickers_subgics_map is None:
         tickers_subgics_map = {ticker: "Misc." for ticker in TICKERS}
 
     try:
-        sql_conn = initialize_db_connection(db_path)
+        sql_conn = initialize_db_connection(DB_PATH)
         ticker_subgics_retrieve_data_map = {}
         ticker_subgics_already_retrieved_map = {}
         for ticker in list(tickers_subgics_map.keys()):
@@ -50,7 +48,7 @@ def main_run(tickers_subgics_map: Optional[Dict[str, str]] = None):
     # then we only need to pass the sqlite connection to the create_app then we can query data when we need it:
     app = create_app(sql_conn)
     app.run_server(debug=True)
-    close_db(sql_conn, db_path)
+    close_db(sql_conn, DB_PATH)
     return
 
 
