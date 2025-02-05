@@ -7,7 +7,7 @@ from .layout import create_container, create_header
 from .styles import colors
 import pandas as pd
 
-DISPLAY_COLS = ['name', 'industry', 'sub_industry', 'price_eps_ratio', 'market_cap_MM', 'enterpriseToEbitda',
+DISPLAY_COLS = ['name', 'ticker', 'industry', 'sub_industry', 'price_eps_ratio', 'market_cap_MM', 'enterpriseToEbitda',
                 'latest_eps', 'profit_margin']
 NOT_METRICS = ['name', 'ticker', 'industry', 'sector', 'subsector', 'label', 'market_cap_string', 'market_cap']
 
@@ -118,7 +118,8 @@ def get_comparison_page_layout(data: pd.DataFrame):
                 dbc.Card([
                     dbc.CardBody([
                         dbc.Button("Toggle EPS Chart", id="collapse-eps-button", className="mb-3", color="primary"),
-                        dbc.Button("Toggle P/E Ratio Chart", id="collapse-pe-ratio-button", className="mb-3", color="secondary")
+                        dbc.Button("Toggle P/E Ratio Chart", id="collapse-pe-ratio-button", className="mb-3", color="secondary"),
+                        dbc.Button("Toggle Profit Margin Chart", id="collapse-pm-button", className="mb-3", color="secondary")
                     ])
                 ], style={'backgroundColor': colors['background']})
             ], width=6),
@@ -151,6 +152,11 @@ def get_comparison_page_layout(data: pd.DataFrame):
                     dbc.Collapse(
                         dcc.Graph(id='price-earnings-ratio-chart'),
                         id="collapse-pe-ratio",
+                        is_open=False
+                    ),
+                    dbc.Collapse(
+                        dcc.Graph(id='profit-margin-chart'),
+                        id="collapse-pm",
                         is_open=False
                     )
                     # Add more graphs and plots here if we want
@@ -203,31 +209,37 @@ def get_comparison_page_layout(data: pd.DataFrame):
 def register_comparison_callbacks(app: dash.Dash, data: pd.DataFrame):
     @app.callback(
         [dash.dependencies.Output("collapse-eps", "is_open"),
-         dash.dependencies.Output("collapse-pe-ratio", "is_open")],
+         dash.dependencies.Output("collapse-pe-ratio", "is_open"),
+         dash.dependencies.Output("collapse-pm", "is_open")],
         [dash.dependencies.Input("collapse-eps-button", "n_clicks"),
-         dash.dependencies.Input("collapse-pe-ratio-button", "n_clicks")],
+         dash.dependencies.Input("collapse-pe-ratio-button", "n_clicks"),
+         dash.dependencies.Input("collapse-pm-button", "n_clicks")],
         [dash.dependencies.State("collapse-eps", "is_open"),
-         dash.dependencies.State("collapse-pe-ratio", "is_open")],
+         dash.dependencies.State("collapse-pe-ratio", "is_open"),
+         dash.dependencies.State("collapse-pm", "is_open")],
     )
-    def toggle_charts(n_clicks_eps, n_clicks_pe, is_open_eps, is_open_pe):
+    def toggle_charts(n_clicks_eps, n_clicks_pe, n_clicks_pm, is_open_eps, is_open_pe, is_open_pm):
         ctx = dash.callback_context
 
         if not ctx.triggered:
-            return False, False
+            return False, False, False
 
         button_id = ctx.triggered[0]['prop_id'].split('.')[0]
 
         if button_id == "collapse-eps-button":
-            return not is_open_eps, False
+            return not is_open_eps, False, False
         elif button_id == "collapse-pe-ratio-button":
-            return False, not is_open_pe
-        return False, False
+            return False, not is_open_pe, False
+        elif button_id == "collapse-pm-button":
+            return False, False, not is_open_pm
+        return False, False, False
 
     @app.callback(
         [dash.dependencies.Output('sub-sector-dropdown', 'options'),
          dash.dependencies.Output('metrics-table', 'data'),
          dash.dependencies.Output('eps-bar-chart', 'figure'),
-         dash.dependencies.Output('price-earnings-ratio-chart', 'figure')],
+         dash.dependencies.Output('price-earnings-ratio-chart', 'figure'),
+         dash.dependencies.Output('profit-margin-chart', 'figure')],
         dash.dependencies.Output('scatter-info-chart', 'figure'),
         [dash.dependencies.Input('sector-dropdown', 'value'),
          dash.dependencies.Input('sub-sector-dropdown', 'value'),
@@ -263,8 +275,12 @@ def register_comparison_callbacks(app: dash.Dash, data: pd.DataFrame):
         table_data = filtered_data.sort_values(by=['price_eps_ratio'], ascending=False).to_dict('records')
 
         # Create bar chart figure
-        fig1 = px.bar(filtered_data, x='latest_eps', y='ticker', title="Latest EPS Comparison", orientation='h')
-        fig2 = px.bar(filtered_data, x='price_eps_ratio', y='ticker', title="P/E Ratio Comparison", orientation='h')
+        fig1 = px.bar(filtered_data.sort_values(by='latest_eps', ascending=False),
+                      x='latest_eps', y='ticker', title="Latest EPS Comparison", orientation='h')
+        fig2 = px.bar(filtered_data.sort_values(by='price_eps_ratio', ascending=True),
+                      x='price_eps_ratio', y='ticker', title="P/E Ratio Comparison", orientation='h')
+        fig4 = px.bar(filtered_data.sort_values(by='profit_margin', ascending=False),
+                      x='profit_margin', y='ticker', title="Profit Margin Comparison", orientation='h')
         fig3 = px.scatter(filtered_data, x=metric_one, y=metric_two, text='ticker', color="label",
                           hover_data={'label': False, 'name': True, 'market_cap_MM': True,
                                       'latest_eps': True, 'price_eps_ratio': True, 'return_on_equity': True,
@@ -284,6 +300,12 @@ def register_comparison_callbacks(app: dash.Dash, data: pd.DataFrame):
             font_color=colors['text'],
             margin=dict(l=20, r=20, t=30, b=20)
         )
+        fig4.update_layout(
+            plot_bgcolor=colors['background'],
+            paper_bgcolor=colors['background'],
+            font_color=colors['text'],
+            margin=dict(l=20, r=20, t=30, b=20)
+        )
         fig3.update_layout(
             plot_bgcolor=colors['background'],
             paper_bgcolor=colors['background'],
@@ -295,7 +317,7 @@ def register_comparison_callbacks(app: dash.Dash, data: pd.DataFrame):
 
         fig3.update_traces(textposition='bottom center', marker=dict(size=10, line=dict(width=2, color='DarkSlateGrey')), selector=dict(mode='markers+text'))
 
-        return sub_sector_options, table_data, fig1, fig2, fig3
+        return sub_sector_options, table_data, fig1, fig2, fig4, fig3
 
     @app.callback(
         [dash.dependencies.Output('radar-chart', 'figure')],
@@ -310,9 +332,9 @@ def register_comparison_callbacks(app: dash.Dash, data: pd.DataFrame):
 
         for metric in metrics:
             # take min and max from all data? not sure about this
-            min_value = data[metric].min()
-            max_value = data[metric].max()
-            normalised_data[metric] = (normalised_data[metric] - min_value) / (max_value - min_value)
+            min_value = normalised_data[metric].min()
+            max_value = normalised_data[metric].max()
+            normalised_data[metric] = normalised_data[metric] / max_value
             # dont fully normalise otherwise bunch of values at 0 which looks bad on radar chart
 
         for company in selected_companies:

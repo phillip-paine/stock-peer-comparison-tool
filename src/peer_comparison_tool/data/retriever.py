@@ -274,7 +274,10 @@ class RetrieveStockData:
         stock_history_normalised['Close'] = stock_history_normalised['Close'] / stock_history_normalised['Close'].iloc[0] * 100
         self.stock_level_data_store['stock_price_normalised_data'] = stock_history_normalised
 
-        self.stock_level_data_store['short_ratio'] = self.stock.info['shortRatio']
+        try:
+            self.stock_level_data_store['short_ratio'] = self.stock.info['shortRatio']
+        except KeyError as E:
+            self.stock_level_data_store['short_ratio'] = 0
         income_statement = self.stock.income_stmt
         income_statement_rows = ['Total Revenue', 'Net Income Continuous Operations', 'Basic EPS']
         income_statement_cols = [c for c in income_statement.columns][:2]

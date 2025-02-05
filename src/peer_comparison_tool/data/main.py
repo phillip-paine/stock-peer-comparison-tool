@@ -40,6 +40,8 @@ def create_ticker_data(tickers_info_map, sql_connection):
 
         # Company Info Data:
         ticker_overview = get_stock_data.add_stock_overview_metrics_to_key_metrics()
+        if not ticker_overview.get('sector'):
+            continue
         ticker_overview.update({'name': df_ticker_id[df_ticker_id['Symbol'] == ticker]['Security'].iloc[0]})
         ticker_overview.update({'sub_industry': subindustry})
         company_most_recent_metrics_list.append(ticker_overview)
@@ -95,7 +97,8 @@ def create_ticker_data(tickers_info_map, sql_connection):
         return
     # Create the ticker time series dataframe: the ticker_data_series_map values have a lot of aggregations
     df_ticker_time_series_data = pd.concat(
-        [stock_map['stock_price_data'] for stock_map in [ticker_data_series_maps[ticker] for ticker in tickers_list]],
+        [stock_map['stock_price_data'] for stock_map in
+         [ticker_data_series_maps[ticker] for ticker in list(ticker_data_series_maps.keys())]],
         axis=0)  # stack vertically
     df_ticker_time_series_data.rename(columns={'Date': 'date', 'Close': 'close_price',
                                                'Close Indexed': 'close_price_indexed'},
@@ -159,7 +162,8 @@ def create_ticker_data(tickers_info_map, sql_connection):
 
     # TODO : here we insert the new data in the tables and append to the existing rows
     # 1. df_ticker_data = company_info table (ticker, name, sector, industry, sub_industry):
-    insert_or_replace(cur, 'company_info', df_ticker_data)
+
+    insert_or_replace(cur, 'company_info', df_ticker_data.dropna())
     # df_ticker_data.to_sql('company_info', sql_connection, if_exists='append', index=False)  # TODO no duplicate rows.
     recent_metrics_table_keys = ['ticker', 'market_cap', 'price_eps_ratio', 'price_to_book', 'return_on_equity',
                                  'debt_to_equity_ratio', 'profit_margin', 'enterpriseToEbitda', 'latest_eps',
