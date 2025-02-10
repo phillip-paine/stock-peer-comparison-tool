@@ -5,6 +5,7 @@ from dash.dependencies import Input, Output
 import dash_bootstrap_components as dbc
 from typing import Dict, Any
 
+from .biggest_winners_and_losers import get_biggest_winners_and_losers_page_layout, register_winners_and_losers_callback
 # from .layout import create_container
 from .landing_page import get_landing_page_layout_v2, register_landing_page_data_callbacks
 from .comparison_page import get_comparison_page_layout, register_comparison_callbacks
@@ -112,6 +113,8 @@ def create_app(db_conn):
         elif pathname == '/company-stock-overview-data':
             return get_individual_company_overview_page_layout(ticker_series_data,
                                                                industry_series_data, industry_metrics_yoy_data)
+        elif pathname == "/winners-and-losers":
+            return get_biggest_winners_and_losers_page_layout(ticker_series_data)
         # TODO add cashflow df back in
         # elif pathname == '/company-discounted-cashflow-calculation':
         #     return get_discounted_cashflow_model_page_layout(cashflow_map, latest_ev_data)
@@ -124,8 +127,10 @@ def create_app(db_conn):
                    Input('quarterly-report-ts-data-page-button', 'n_clicks'),
                    Input('balance-sheet-report-ts-data-page-button', 'n_clicks'),
                    Input('company-stock-overview-data-page-button', 'n_clicks'),
-                   Input('company-discounted-cashflow-calculation-page-button', 'n_clicks')])
-    def navigate(n_clicks_comparison, n_clicks_quarterly, n_clicks_balance_sheet, n_clicks_company_overview, n_clicks_company_dcf):
+                   Input('company-discounted-cashflow-calculation-page-button', 'n_clicks'),
+                   Input('biggest-winners-and-losers-page-button', 'n_clicks')])
+    def navigate(n_clicks_comparison, n_clicks_quarterly, n_clicks_balance_sheet, n_clicks_company_overview,
+                 n_clicks_company_dcf, n_clicks_winners_and_losers):
         ctx = dash.callback_context
 
         if not ctx.triggered:
@@ -141,6 +146,8 @@ def create_app(db_conn):
             return '/balance-sheet-report-ts-data'
         elif button_id == 'company-stock-overview-data-page-button':
             return '/company-stock-overview-data'
+        elif button_id == "/winners-and-losers":
+            return get_biggest_winners_and_losers_page_layout(ticker_series_data)
         # elif button_id == 'company-discounted-cashflow-calculation-page-button':
         #     return '/company-discounted-cashflow-calculation'
         else:
@@ -152,6 +159,7 @@ def create_app(db_conn):
     register_balance_sheet_report_page_callbacks(app, bs_data)
     register_individual_company_overview_callback(app, company_info, ticker_series_data, ticker_metric_yoy_data,
                                                   industry_series_data, industry_metrics_yoy_data)
+    register_winners_and_losers_callback(app, ticker_series_data)
     # register_discounted_cashflow_model_page_callbacks(app, cashflow_map, latest_ev_data)
 
     # Callback to handle the "Return to Home" button click

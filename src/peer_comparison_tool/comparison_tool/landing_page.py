@@ -43,6 +43,7 @@ def get_landing_page_layout_v2(economic_data: pd.DataFrame):
                         dbc.NavLink("Quarterly Reports", href="/quarterly-report-ts-data", active="exact"),
                         dbc.NavLink("Yearly Balance Statememt", href="/balance-sheet-report-ts-data", active="exact"),
                         dbc.NavLink("Company Overviews", href="/company-stock-overview-data", active="exact"),
+                        dbc.NavLink("Biggest Price Movers", href="/winners-and-losers", active="exact"),
                         # dbc.NavLink("Discounted Cashflow Model", href="/company-discounted-cashflow-calculation", active="exact"),
                     ],
                     vertical=True,
@@ -197,6 +198,12 @@ def get_landing_page_layout():
                 dbc.Button(
                     "Company History Overview Page",
                     id="company-stock-overview-data-page-button",
+                    color="primary",
+                    style={'backgroundColor': colors['primary']}
+                ),
+                dbc.Button(
+                    "Biggest Stock Movers",
+                    id="biggest-winners-and-losers-page-button",
                     color="primary",
                     style={'backgroundColor': colors['primary']}
                 ),
