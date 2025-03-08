@@ -32,12 +32,15 @@ def create_ticker_data(tickers_info_map, sql_connection):
     cashflow_map: Dict[str, pd.DataFrame] = {}
     tickers_list = list(tickers_info_map.keys())
     for ticker, subindustry in tickers_info_map.items():
-        get_stock_data = RetrieveStockData(ticker)
-        if not get_stock_data.try_stock_ticker():
-            # remove ticker and pass loop
-            tickers_list = [t for t in tickers_list if t != ticker]
+        try:
+            get_stock_data = RetrieveStockData(ticker)
+            if not get_stock_data.try_stock_ticker():
+                # remove ticker and pass loop
+                tickers_list = [t for t in tickers_list if t != ticker]
+                continue
+        except AttributeError as e:
+            print(e)
             continue
-
         # Company Info Data:
         ticker_overview = get_stock_data.add_stock_overview_metrics_to_key_metrics()
         if not ticker_overview.get('sector'):

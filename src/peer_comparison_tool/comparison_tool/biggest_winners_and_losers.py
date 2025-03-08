@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 from .styles import colors
 import pandas as pd
 
-DISPLAY_COLS = ['name', 'ticker', 'industry', 'sub_industry']  # 'price_change', 'signifiance']
+DISPLAY_COLS = ['name', 'ticker', 'industry', 'sub_industry', 'close_price_indexed_dod']  # 'price_change', 'signifiance']
 # significance is some measure of price change and historical vol.
 
 
@@ -26,7 +26,7 @@ def get_biggest_winners_and_losers_page_layout(data: pd.DataFrame):
             dbc.Col([
                 html.Label("Select GICS Sector:", style={'color': colors['text']}),
                 dcc.Dropdown(
-                    id='sector-dropdown',
+                    id='sector-dropdown2',
                     options=[{'label': sector, 'value': sector} for sector in data['sector'].unique()],
                     value=[data['sector'].iloc[0]],  # Default selection - jut pick first sector? or leave blank?
                     multi=True,
@@ -37,7 +37,7 @@ def get_biggest_winners_and_losers_page_layout(data: pd.DataFrame):
             dbc.Col([
                 html.Label("Select GICS Sub-industry:", style={'color': colors['text']}),
                 dcc.Dropdown(
-                    id='sub-sector-dropdown',
+                    id='sub-sector-dropdown2',
                     # options=[{'label': sector, 'value': sector} for sector in data['sub_industry'].unique()],
                     # value=[data['sub_industry'].iloc[0]],  # Default selection - jut pick first sector? or leave blank?
                     multi=True,
@@ -58,7 +58,7 @@ def get_biggest_winners_and_losers_page_layout(data: pd.DataFrame):
                             dbc.Col([
                                 dash_table.DataTable(
                                     id='big-movers-table',
-                                    columns=[{"name": i, "id": i} for i in data[DISPLAY_COLS].columns],
+                                    columns=[{"name": i, "id": i} for i in DISPLAY_COLS],
                                     data=data.head(5).to_dict('records'),
                                     sort_action='native',
                                     sort_mode='multi',
@@ -82,12 +82,15 @@ def get_biggest_winners_and_losers_page_layout(data: pd.DataFrame):
                                         'textOverflow': 'ellipsis',
                                     }
                                 )
-                            ], width=6),
+                            ], width=9),
                             dbc.Col([
+                                html.H5('(Sub-)Sector Change', style={'color': colors['text']}),
                                 dbc.Card([
-
-                                ], style={'backgroundColor': colors['background']}),
-                            ], width=6)
+                                    dbc.CardBody([
+                                        html.Div(id='sub-sector-day-change', style={'margin-bottom': '10px'}),
+                                    ]),
+                                ], style={'background-color': colors['background'], 'margin-bottom': '10px'}),
+                            ], width=3)
                         ])
                     ], style={'backgroundColor': colors['background']}),
                 ], style={'backgroundColor': colors['background']}), width=12
@@ -99,10 +102,11 @@ def get_biggest_winners_and_losers_page_layout(data: pd.DataFrame):
 
 def register_winners_and_losers_callback(app: dash.Dash, data: pd.DataFrame):
     @app.callback(
-        [dash.dependencies.Output('sub-sector-dropdown', 'options'),
-         dash.dependencies.Output('big-movers-table', 'data')],
-        [dash.dependencies.Input('sector-dropdown', 'value'),
-         dash.dependencies.Input('sub-sector-dropdown', 'value'),
+        [dash.dependencies.Output('sub-sector-dropdown2', 'options'),
+         dash.dependencies.Output('big-movers-table', 'data'),
+         dash.dependencies.Output('sub-sector-day-change', 'children')],
+        [dash.dependencies.Input('sector-dropdown2', 'value'),
+         dash.dependencies.Input('sub-sector-dropdown2', 'value'),
         ]
     )
     def update_table(selected_sector, selected_sub_sectors):
@@ -131,9 +135,11 @@ def register_winners_and_losers_callback(app: dash.Dash, data: pd.DataFrame):
                 filtered_data.dropna(how='any', inplace=True)
 
         # Update DataTable
-        filtered_data['close_price_indexed_dod'] = filtered_data['close_price_indexed'].pct_change(periods=1)
-        filtered_data_recent = filtered_data.loc[filtered_data.groupby(['ticker'])['date'].idxmax()]
-        filtered_data_recent = filtered_data_recent.sort_values(by=['close_price_indexed'], ascending=False)
+        filtered_data['close_price_indexed_dod'] = filtered_data['close_price_indexed'].pct_change(periods=1) * 100
+        filtered_data['close_price_indexed_dod'] = filtered_data['close_price_indexed_dod'].round(2)
+        filtered_data_recent = filtered_data.loc[filtered_data.groupby(['ticker'])['date'].idxmax()].reset_index()
+        filtered_data_recent = filtered_data_recent.sort_values(by=['close_price_indexed_dod'], ascending=False)
+        filtered_daily_change_average = filtered_data_recent['close_price_indexed_dod'].mean().round(2)
 
         table_data = pd.concat([filtered_data_recent.head(5), filtered_data_recent.tail(5)]).to_dict('records')
-        return sub_sector_options, table_data
+        return sub_sector_options, table_data, filtered_daily_change_average

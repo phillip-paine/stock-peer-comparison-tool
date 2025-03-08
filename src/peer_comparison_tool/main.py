@@ -69,12 +69,12 @@ if __name__ == '__main__':
     df_ticker_id = pd.read_csv(os.path.expanduser('~/Documents/Code/peer-comparison-tool/data/sp500_security_ticker.csv'))
     # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Utilities"]
     # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Materials"]
-    # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Health Care"]
+    df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Health Care"]
     # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Financials"]
     # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Industrials"]
     # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Energy"]
     # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Consumer Staples"]
-    df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Information Technology"]
+    # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Information Technology"]
     map_tickers_subindustry = dict(zip(df_ticker_id['Symbol'], df_ticker_id['GICS Sub-Industry']))
     # tickers = ["AAPL", "MSFT", "AMZN", "NVDA", "META"]
     # map_tickers_subindustry = {'ELV': 'Managed Health Care', 'STE': 'Health Care Equipment',
