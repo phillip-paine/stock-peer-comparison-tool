@@ -41,6 +41,9 @@ def create_ticker_data(tickers_info_map, sql_connection):
         except AttributeError as e:
             print(e)
             continue
+        except IndexError as e:
+            print(e)
+            continue
         # Company Info Data:
         ticker_overview = get_stock_data.add_stock_overview_metrics_to_key_metrics()
         if not ticker_overview.get('sector'):

@@ -69,8 +69,8 @@ if __name__ == '__main__':
     df_ticker_id = pd.read_csv(os.path.expanduser('~/Documents/Code/peer-comparison-tool/data/sp500_security_ticker.csv'))
     # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Utilities"]
     # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Materials"]
-    df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Health Care"]
-    # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Financials"]
+    # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Health Care"]
+    df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Financials"]
     # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Industrials"]
     # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Energy"]
     # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Consumer Staples"]
