@@ -4,7 +4,7 @@ import os
 from typing import Dict, Any
 from datetime import date
 
-from .retriever import RetrieveStockData
+from .retriever import RetrieveStockData, DataRetrievalError
 from .constants import TICKERS
 from .utils import create_valuation_clusters
 
@@ -38,6 +38,9 @@ def create_ticker_data(tickers_info_map, sql_connection):
                 # remove ticker and pass loop
                 tickers_list = [t for t in tickers_list if t != ticker]
                 continue
+        except DataRetrievalError as e:
+            print(e)
+            continue
         except AttributeError as e:
             print(e)
             continue

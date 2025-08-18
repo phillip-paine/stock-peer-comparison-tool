@@ -99,13 +99,12 @@ class RetrieveStockData:
         return True
 
     def stock_check_then_retrieve_data(self):
-        try:
-            self.retrieve_balance_sheet()
-            self.retrieve_recent_quarterly_financials()
-            self.retrieve_cashflow_data()
-
-        except DataRetrievalError as e:
-            print(f"Error {e}")
+        self.retrieve_balance_sheet()
+        self.retrieve_recent_quarterly_financials()
+        self.retrieve_cashflow_data()
+        if self.balance_sheets.empty and self.quarterly_finances.empty:
+            print(f"No data retrieved for {self.stock_ticker}")
+            raise DataRetrievalError
 
     @property
     def quarterly_finances(self):
