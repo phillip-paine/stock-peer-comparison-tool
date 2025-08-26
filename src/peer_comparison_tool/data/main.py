@@ -3,6 +3,8 @@ import pandas as pd
 import os
 from typing import Dict, Any
 from datetime import date
+import time
+import random
 
 from .retriever import RetrieveStockData, DataRetrievalError
 from .constants import TICKERS
@@ -32,6 +34,7 @@ def create_ticker_data(tickers_info_map, sql_connection):
     cashflow_map: Dict[str, pd.DataFrame] = {}
     tickers_list = list(tickers_info_map.keys())
     for ticker, subindustry in tickers_info_map.items():
+        time.sleep(random.uniform(1.0, 2.5))
         try:
             get_stock_data = RetrieveStockData(ticker)
             if not get_stock_data.try_stock_ticker():
