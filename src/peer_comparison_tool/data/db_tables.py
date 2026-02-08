@@ -357,6 +357,24 @@ def create_data_record_table(conn):
     print('Create date record table')
 
 
+def create_metadata_table(conn):
+    cur = conn.cursor()
+
+    query_drop = "DROP TABLE IF EXISTS metadata;"
+    cur.execute(query_drop)
+
+    query = """
+        CREATE TABLE IF NOT EXISTS metadata (
+            table_name TEXT NOT NULL,
+            description TEXT
+        )
+    """
+    cur.execute(query)
+    conn.commit()
+    cur.close()
+    print('Create metadata table')
+
+
 # We need the aggregated tables that are created every time data is updated:
 # this is things like the industry/sub-industry totals etc.
 # also need to recreate the cluster labels

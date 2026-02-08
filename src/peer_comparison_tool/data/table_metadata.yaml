@@ -1,0 +1,59 @@
+asset_class_time_series:
+  table_name: asset_class_time_series
+  description: Table contains price time series for a number of ETFs, commodities, index funds and forex assets.
+
+balance_sheet_data:
+  table_name: balance_sheet_data
+  description: Table containing key balance sheet data for stocks over time, includes calculated ratios from reported data.
+
+cashflow_statement_data:
+  table_name: cashflow_statement_data
+  description: Table containing key cashflow statement data for stocks indexed by time.
+
+cluster_table:
+  table_name: cluster_table
+  description: Table containing stock membership labels from clustering financial statement data.
+
+company_info:
+  table_name: company_info
+  description: Table containing company information including stock ticker, industry, sector and so on.
+
+data_storage_record:
+  table_name: data_storage_record
+  description: Table containing stock ticker and last updated date.
+
+industry_metrics:
+  table_name: industry_metrics
+  description: Table containing industry aggregated financial data from company statements
+
+industry_metrics_yoy:
+  table_name: industry_metrics_yoy
+  description: Table with the year-on-year comparison metrics from industry metrics table
+
+industry_time_series:
+  table_name: industry_time_series
+  description: Table containing the sum of ticker close price aggregated into industries
+
+industry_time_series_yoy:
+  table_name: industry_time_series_yoy
+  description: Table containing the year-on-year industry metrics time series
+
+quarterly_financial_data:
+  table_name: quarterly_financial_data
+  description: Table containing key statistics and metrics from company quarterly financial reports
+
+ticker_metrics_yoy:
+  table_name: ticker_metrics_yoy
+  description: Table containing the year-on-year quarterly metric data
+
+ticker_most_recent_metric_data:
+  table_name: ticker_most_recent_metric_data
+  description: Table containing the latest available statistics like stock price, market cap, enterprise value for companies
+
+ticker_time_series:
+  table_name: ticker_time_series
+  description: Table containing the daily close price by stock tickers
+
+ticker_ts_yoy:
+  table_name: ticker_ts_yoy
+  description: Table containing year-over-year daily close price by stock ticker
