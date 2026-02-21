@@ -365,13 +365,14 @@ def create_metadata_table(conn):
 
     query = """
         CREATE TABLE IF NOT EXISTS metadata (
-            table_name TEXT NOT NULL,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            table_name TEXT UNIQUE NOT NULL,
             description TEXT
         )
     """
     cur.execute(query)
     conn.commit()
-    cur.close()
+    conn.close()
     print('Create metadata table')
 
 
@@ -399,14 +400,15 @@ if __name__ == '__main__':
     # create_ticker_report_yoy_data(db_conn)
     # create_industry_report_metrics_data(db_conn)
     # create_industry_report_yoy_data(db_conn)
-    create_asset_class_ts_table(db_conn)
+    # create_asset_class_ts_table(db_conn)
+    create_metadata_table(db_conn)
 
     # print the names of all tables in the db:
-    cursor = db_conn.cursor()
-    cursor.execute("SELECT * from sqlite_master WHERE type='table';")
-
-    tables = cursor.fetchall()
-    for table in tables:
-        print(f'table name: {table[1]}')
-    cursor.close()
-    close_db(db_conn, db_path)
+    # cursor = db_conn.cursor()
+    # cursor.execute("SELECT * from sqlite_master WHERE type='table';")
+    #
+    # tables = cursor.fetchall()
+    # for table in tables:
+    #     print(f'table name: {table[1]}')
+    # cursor.close()
+    # close_db(db_conn, db_path)
