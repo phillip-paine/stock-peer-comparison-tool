@@ -115,6 +115,8 @@ def create_app(db_conn):
                                                                industry_series_data, industry_metrics_yoy_data)
         elif pathname == "/winners-and-losers":
             return get_biggest_winners_and_losers_page_layout(ticker_series_data)
+        elif pathname == "/compass-chat":
+            return get_chat_page_layout()
         # TODO add cashflow df back in
         # elif pathname == '/company-discounted-cashflow-calculation':
         #     return get_discounted_cashflow_model_page_layout(cashflow_map, latest_ev_data)
@@ -128,9 +130,10 @@ def create_app(db_conn):
                    Input('balance-sheet-report-ts-data-page-button', 'n_clicks'),
                    Input('company-stock-overview-data-page-button', 'n_clicks'),
                    Input('company-discounted-cashflow-calculation-page-button', 'n_clicks'),
-                   Input('biggest-winners-and-losers-page-button', 'n_clicks')])
+                   Input('biggest-winners-and-losers-page-button', 'n_clicks'),
+                   Input('agent-chat-page-button', 'n_clicks')])
     def navigate(n_clicks_comparison, n_clicks_quarterly, n_clicks_balance_sheet, n_clicks_company_overview,
-                 n_clicks_company_dcf, n_clicks_winners_and_losers):
+                 n_clicks_company_dcf, n_clicks_winners_and_losers, n_clicks_agent_chat):
         ctx = dash.callback_context
 
         if not ctx.triggered:
@@ -148,6 +151,8 @@ def create_app(db_conn):
             return '/company-stock-overview-data'
         elif button_id == "/winners-and-losers":
             return get_biggest_winners_and_losers_page_layout(ticker_series_data)
+        elif button_id == "/agent-chat-page-button":
+            return '/compass-chat'
         # elif button_id == 'company-discounted-cashflow-calculation-page-button':
         #     return '/company-discounted-cashflow-calculation'
         else:
@@ -160,6 +165,7 @@ def create_app(db_conn):
     register_individual_company_overview_callback(app, company_info, ticker_series_data, ticker_metric_yoy_data,
                                                   industry_series_data, industry_metrics_yoy_data)
     register_winners_and_losers_callback(app, ticker_series_data)
+    register_agent_chat_callback(app)
     # register_discounted_cashflow_model_page_callbacks(app, cashflow_map, latest_ev_data)
 
     # Callback to handle the "Return to Home" button click

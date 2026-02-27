@@ -11,6 +11,7 @@ from prompt_library import SUMMARISER_PROMPT, SELECT_TABLE_PROMPT, GENERATE_SQL_
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import SystemMessage, HumanMessage
 import json
+import re
 
 
 def select_tables(state: QueryState, llm: BaseChatModel) -> QueryState:
@@ -124,44 +125,41 @@ def generate_sql_query(
     return sql
 
 
-def validate_sql_query(state: QueryState, llm: BaseChatModel) -> dict:
+def validate_sql_query(state: QueryState) -> dict:
     """
-    Validate that the generated SQL query is correct and can answer the user question.
+    Validate that the generated SQL query uses only available tables and is syntactically valid.
 
     Returns:
         dict with 'is_valid': bool and 'feedback': str (if invalid)
     """
+    sql = state.sql_query
+    available_tables = set(state.schemas.keys())
 
-    schema_block = format_schema_block(state.schemas)
+    # Extract table names from SQL using regex
+    # Matches: FROM table, JOIN table
+    table_pattern = r'\b(?:FROM|JOIN)\s+([a-zA-Z_][a-zA-Z0-9_]*)\b'
+    used_tables = set(re.findall(table_pattern, sql, re.IGNORECASE))
 
-    human_prompt = f"""The User Question:
-{state.user_question}
+    # Check if all used tables are available
+    invalid_tables = used_tables - available_tables
+    if invalid_tables:
+        return {
+            "is_valid": False,
+            "feedback": f"Query references non-existent tables: {', '.join(invalid_tables)}. Available tables: {', '.join(available_tables)}"
+        }
 
-And the Available Tables and Schema:
-{schema_block}
-
-Finally, the Query:
-{state.sql_query}
-
-Considering the available table and its schema, is this a valid SQL query?"""
-
-    messages = [
-        SystemMessage(content=VALIDATE_SQL_PROMPT),
-        HumanMessage(content=human_prompt),
-    ]
-
+    # Check SQL syntax by using SQLite's EXPLAIN
     try:
-        response = call_llm(llm, messages)
-    except Exception as e:
-        raise RuntimeError(f"LLM call failed during validation: {e}") from e
+        conn = initialize_db_connection(DB_PATH)
+        conn.execute(f"EXPLAIN {sql}")
+        conn.close()
+    except sqlite3.Error as e:
+        return {
+            "is_valid": False,
+            "feedback": f"Invalid SQL syntax: {str(e)}"
+        }
 
-    result = response.content.strip()
-
-    if result.startswith("VALID"):
-        return {"is_valid": True, "feedback": ""}
-    else:
-        feedback = result.replace("INVALID:", "").strip()
-        return {"is_valid": False, "feedback": feedback}
+    return {"is_valid": True, "feedback": ""}
 
 
 def run_sql_query(sql_query: str) -> QueryState:

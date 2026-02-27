@@ -80,7 +80,7 @@ if __name__ == '__main__':
     # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Industrials"]
     # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Energy"]
     # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Consumer Staples"]
-    df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Information Technology"]
+    df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Information Technology"].iloc[:5]
     map_tickers_subindustry = dict(zip(df_ticker_id['Symbol'], df_ticker_id['GICS Sub-Industry']))
     # tickers = ["AAPL", "MSFT", "AMZN", "NVDA", "META"]
     # map_tickers_subindustry = {'ELV': 'Managed Health Care', 'STE': 'Health Care Equipment',

@@ -34,7 +34,7 @@ def run_query(user_question: str) -> str:
     for attempt in range(max_retries):
         state.sql_query = generate_sql_query(state, llm)
 
-        validation = validate_sql_query(state, llm)
+        validation = validate_sql_query(state)
 
         if validation["is_valid"]:
             logger.info(f"SQL validated successfully on attempt {attempt + 1}")
@@ -62,7 +62,7 @@ def run_query(user_question: str) -> str:
     if not state.answer:
         raise ValueError("summarise() returned an empty answer.")
 
-    return state.answer
+    return state.answer, state.sql_query
 
 
 if __name__ == '__main__':
