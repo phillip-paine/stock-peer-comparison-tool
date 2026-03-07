@@ -104,7 +104,8 @@ def create_ticker_data(tickers_info_map, sql_connection):
 
         # if get_stock_data.stock_info_key is not None:
         #     click.echo(f"Key stock info for {ticker}: {get_stock_data.stock_info_key}")
-    if not tickers_list:
+    if not tickers_list or not ticker_data_series_maps:
+        print("No tickers requested or not tickers returned")
         cur.close()
         return
     # Create the ticker time series dataframe: the ticker_data_series_map values have a lot of aggregations
