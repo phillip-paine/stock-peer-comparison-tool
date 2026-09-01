@@ -16,8 +16,8 @@ from .individual_company_overview_page import get_individual_company_overview_pa
 from .discounted_cashflow_model_page import get_discounted_cashflow_model_page_layout, register_discounted_cashflow_model_page_callbacks
 from .styles import colors
 
-from src.peer_comparison_tool.data.queries import get_table_data_query
-from src.peer_comparison_tool.data.db_utils import fetch_table_data
+from src.peer_comparison_tool.data_old.queries import get_table_data_query
+from src.peer_comparison_tool.data_old.db_utils import fetch_table_data
 
 
 def create_app(db_conn):

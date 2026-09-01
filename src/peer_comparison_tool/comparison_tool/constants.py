@@ -1,6 +1,6 @@
 import os
 
-DOWNLOAD_DIR = "~/Documents/Code/peer-comparison-tool/data"
+DOWNLOAD_DIR = "/data_files"
 
 HUGGINGFACE_API_TOKEN = os.getenv("HUGGINGFACE_API_TOKEN")
 DB_PATH = os.getenv("DB_PATH")

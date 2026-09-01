@@ -4,7 +4,7 @@ import os
 from typing import List
 from scipy.stats import trim_mean
 from constants import DB_PATH, HUGGINGFACE_API_URL, HUGGINGFACE_API_TOKEN
-from src.peer_comparison_tool.data.db import initialize_db_connection
+from src.peer_comparison_tool.data_old.db import initialize_db_connection
 import requests
 import re
 # Could use the huggingfac_hub client as well instead of requests
@@ -104,7 +104,7 @@ def find_bad_news_price_drops(tickers: List[str]):
 
 
 if __name__ == '__main__':
-    df_ticker_id = pd.read_csv(os.path.expanduser('~/Documents/Code/peer-comparison-tool/data/sp500_security_ticker.csv'))
+    df_ticker_id = pd.read_csv(os.path.expanduser('/data_files/sp500_security_ticker.csv'))
     # Testing code:
     # apple_ticker = yf.Ticker("Aapl")
     # apple_news = apple_ticker.get_news()  # returns the latest 8 stories?

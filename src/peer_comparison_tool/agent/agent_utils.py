@@ -1,6 +1,6 @@
 import sqlite3
 from src.peer_comparison_tool.comparison_tool.constants import DB_PATH
-from src.peer_comparison_tool.data.db import initialize_db_connection
+from src.peer_comparison_tool.data_old.db import initialize_db_connection
 from typing import Any, Dict, List
 import re
 import json

@@ -1,5 +1,5 @@
 from src.peer_comparison_tool.comparison_tool.constants import DB_PATH
-from src.peer_comparison_tool.data.db import initialize_db_connection
+from src.peer_comparison_tool.data_old.db import initialize_db_connection
 import sqlite3
 import json
 from typing import Any, Dict, List

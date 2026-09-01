@@ -1,88 +1,83 @@
+"""
+CLI entry point for the data pipeline.
+
+Replaces the root `main.py`. The original `main_run()` mixed data-pipeline
+orchestration with starting the Dash server in the same function, and its
+`execute_app()` click command was marked "TODO out of date - will not run
+from CLI currently" — its call signature didn't match the real
+`create_ticker_data()` function it was meant to invoke.
+
+This version covers only the data-layer scope of this refactor: fetch,
+transform, persist, aggregate. It deliberately does not start the
+dashboard — that's a separate piece of work. See the note at the bottom of
+this file for what needs to happen before the two are wired back together.
+"""
+from __future__ import annotations
+
+import logging
+
 import click
-import pandas as pd
-import os
 
-from data.constants import TICKERS
-from comparison_tool.constants import DB_PATH
-from data.main import create_ticker_data, create_aggregations_data
-from comparison_tool.app import create_app
-from data.db import initialize_db_connection, close_db
-from data.db_utils import check_ticker_data_recency, check_asset_data_recency, update_other_asset_classes
+from peer_comparison_tool.data.config import settings
+from peer_comparison_tool.data.constants import TICKERS
+from peer_comparison_tool.data.database import init_db, session_scope
+from peer_comparison_tool.data.pipeline import load_company_names, run_pipeline
+from peer_comparison_tool.data.repository import Repository
 
-from typing import Optional, Dict
-
-from src.peer_comparison_tool.data.retriever import RetrieveEconomicsData
+logger = logging.getLogger(__name__)
 
 
-def main_run(tickers_subgics_map: Optional[Dict[str, str]] = None):
-    if tickers_subgics_map is None:
-        tickers_subgics_map = {ticker: "Misc." for ticker in TICKERS}
-
-    try:
-        sql_conn = initialize_db_connection(DB_PATH)
-        ticker_subgics_retrieve_data_map = {}
-        ticker_subgics_already_retrieved_map = {}
-        for ticker in list(tickers_subgics_map.keys()):
-            if check_ticker_data_recency(sql_conn, ticker):
-                ticker_subgics_already_retrieved_map[ticker] = tickers_subgics_map[ticker]
-            else:
-                ticker_subgics_retrieve_data_map[ticker] = tickers_subgics_map[ticker]
-
-    except ValueError as e:
-        print(e)
-        return
-
-    # fetch new data,transform and write to tables then update aggregations such as industry time series etc:
-    if ticker_subgics_retrieve_data_map:
-        create_ticker_data(ticker_subgics_retrieve_data_map, sql_conn)  # TODO uncomment
-        # rerun aggregations, clustering, other ML models etc. if needed to store updated summaries and features:
-        create_aggregations_data(sql_conn, tickers_subgics_map)
-
-    asset_retriever = RetrieveEconomicsData()
-    for asset in list(asset_retriever.non_stock_entities.keys()):
-        if check_asset_data_recency(sql_conn, asset):
-            del asset_retriever.non_stock_entities[asset]  # remove from the map
-
-    update_other_asset_classes(asset_retriever, sql_conn)
-
-    # then we only need to pass the sqlite connection to the create_app then we can query data when we need it:
-    app = create_app(sql_conn)
-    app.run_server(debug=True)
-    close_db(sql_conn, DB_PATH)
-    return
+def build_ticker_subindustry_map(gics_sector: str | None = None) -> dict[str, str]:
+    """Ticker -> GICS sub-industry, sourced from the cached S&P 500
+    constituent list. Optionally filtered to one GICS sector — the original
+    controlled this by commenting/uncommenting lines at the bottom of
+    main.py; here it's a runtime parameter instead.
+    """
+    df = load_company_names()
+    if gics_sector:
+        df = df[df["GICS Sector"] == gics_sector]
+    return dict(zip(df["Symbol"], df["GICS Sub-Industry"]))
 
 
 @click.command()
-@click.option('--tickers', default=None, prompt='Stock Ticker', help='Pass the stock ticker of the stock you wish to retrieve financial data for')
-def execute_app(tickers):
-    # TODO out of date - will not run from CLI currently
+@click.option(
+    "--tickers", default=None,
+    help="Comma-separated stock tickers to fetch, e.g. 'AAPL,MSFT'. "
+         "Defaults to the built-in TICKERS list if omitted.",
+)
+@click.option(
+    "--gics-sector", default=None,
+    help="Restrict to one GICS sector from the S&P 500 constituent list, "
+         "e.g. 'Health Care'. Ignored if --tickers is given.",
+)
+def run(tickers: str | None, gics_sector: str | None) -> None:
+    """Fetch, transform, and persist stock/asset-class data, then refresh
+    the materialized aggregate tables."""
+    logging.basicConfig(level=logging.INFO)
+
     if tickers:
-        tickers = tickers.split(", ")
+        ticker_list = [t.strip() for t in tickers.split(",") if t.strip()]
+        ticker_subindustry_map = {t: "Misc." for t in ticker_list}
+    elif gics_sector:
+        ticker_subindustry_map = build_ticker_subindustry_map(gics_sector)
     else:
-        tickers = TICKERS
-    df_ticker_metrics, df_ticker_qfinancials = create_ticker_data(tickers)
-    app = create_app(df_ticker_metrics, df_ticker_qfinancials)
-    app.run_server(debug=True)
+        ticker_subindustry_map = {t: "Misc." for t in TICKERS}
+
+    init_db()
+    with session_scope() as session:
+        repo = Repository(session)
+        run_pipeline(repo, ticker_subindustry_map)
+
+    logger.info("Pipeline complete. Data written to %s", settings.database_url)
 
 
-if __name__ == '__main__':
-    df_ticker_id = pd.read_csv(os.path.expanduser('~/Documents/Code/peer-comparison-tool/data/sp500_security_ticker.csv'))
-    # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Utilities"]
-    # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Materials"]
-    # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Health Care"]
-    # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Financials"]
-    # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sub-Industry'].isin(["Life & Health Insurance", "Property & Casualty Insurance"])]
-    # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sub-Industry'].isin(["Consumer Finance", "Multi-line Insurance"])]
-    # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sub-Industry'].isin(["Asset Management & Custody Bank", "Insurance Brokers"])]
-    # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sub-Industry'].isin(["Diversified Banks", "Multi-Sector Holdings"])]
-    # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sub-Industry'].isin(["Financial Exchanges & Data", "Investment Banking & Brokerage"])]
-    # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sub-Industry'].isin(["Regional Banks", "Reinsurance", "Transaction & Payment Processing Services"])]
-    # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Industrials"]
-    # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Energy"]
-    # df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Consumer Staples"]
-    df_ticker_id = df_ticker_id[df_ticker_id['GICS Sector'] == "Information Technology"].iloc[:5]
-    map_tickers_subindustry = dict(zip(df_ticker_id['Symbol'], df_ticker_id['GICS Sub-Industry']))
-    # tickers = ["AAPL", "MSFT", "AMZN", "NVDA", "META"]
-    # map_tickers_subindustry = {'ELV': 'Managed Health Care', 'STE': 'Health Care Equipment',
-    #                            'TFX': 'Health Care Equipment'}
-    main_run(map_tickers_subindustry)
+if __name__ == "__main__":
+    run()
+
+
+# --- Note on reconnecting the dashboard ---
+# The dashboard (src/peer_comparison_tool/comparison_tool/) reads its own
+# DB_PATH from comparison_tool/constants.py, separate from this refactor's
+# settings.database_url in data/config.py. Until the dashboard is refactored,
+# point PCT_DATABASE_URL (or comparison_tool's DB_PATH) at the same file so
+# both sides agree on where the data actually lives.

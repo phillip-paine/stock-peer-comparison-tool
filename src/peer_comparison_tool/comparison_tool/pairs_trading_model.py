@@ -175,7 +175,7 @@ def spread_alerting(pairs_data: List[Dict[str, Any]]):
 
 
 if __name__ == '__main__':
-    df_ticker_id = pd.read_csv(os.path.expanduser('~/Documents/Code/peer-comparison-tool/data/sp500_security_ticker.csv'))
+    df_ticker_id = pd.read_csv(os.path.expanduser('/data_files/sp500_security_ticker.csv'))
     df_ticker_id = df_ticker_id[df_ticker_id['GICS Sub-Industry'] == "Fertilizers & Agricultural Chemicals"]
     ticker_list = df_ticker_id['Symbol'].to_list()
     # test_individual_asset_pairs(ticker_list)
