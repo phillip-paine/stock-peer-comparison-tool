@@ -196,13 +196,12 @@ def run_pipeline(
     client: YFinanceClient | None = None,
 ) -> None:
     """Full data-layer pipeline: ingest stock tickers, ingest asset classes,
-    refresh every materialized aggregate table.
+    refresh every materialized aggregate table (including valuation
+    clusters).
 
     Replaces the body of the original `main_run()` (excluding the dashboard
     startup, which is out of scope for this refactor) plus
-    `create_aggregations_data()`'s YoY/industry portion. Clustering
-    (`create_valuation_clusters`) isn't wired in yet — see data/utils.py's
-    pending refactor.
+    `create_aggregations_data()`.
     """
     client = client or YFinanceClient()
     fetched_tickers = ingest_tickers(client, repo, ticker_subindustry_map)

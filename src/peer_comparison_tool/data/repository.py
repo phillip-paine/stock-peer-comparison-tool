@@ -41,7 +41,7 @@ from sqlalchemy import inspect, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
-from .models import Base, CompanyInfo, DataStorageRecord, TickerMostRecentMetric
+from .models import Base, ClusterMembership, CompanyInfo, DataStorageRecord, TickerMostRecentMetric
 
 UpsertMode = Literal["ignore", "replace"]
 
@@ -173,6 +173,25 @@ class Repository:
         # refresh_*() calls run back-to-back inside one session_scope(),
         # as aggregations.run_all() does.
         return pd.read_sql(stmt, self._session.connection())
+
+    def latest_cluster_membership(self) -> pd.DataFrame:
+        """Most recent DBSCAN cluster-membership row per ticker.
+
+        `cluster_table` accumulates one row per ticker *per pipeline run*
+        (clustering, once it exists, will write with `mode="ignore"` like
+        everything else in `aggregations.py`), so historical assignments
+        pile up rather than being overwritten. This replaces the old
+        `fetch_table_data(..., most_recent=True)` branch that special-cased
+        `cluster_table` by grouping on ticker and keeping the max date —
+        same tie-breaking behaviour (latest `date` wins per ticker), just
+        expressed as a normal Repository method instead of a hardcoded
+        branch inside the generic fetch function.
+        """
+        all_rows = self.fetch_dataframe(ClusterMembership)
+        if all_rows.empty:
+            return all_rows
+        latest_idx = all_rows.groupby("ticker")["date"].idxmax()
+        return all_rows.loc[latest_idx].reset_index(drop=True)
 
     def recent_metrics_by_subindustry(self, sub_industry: str) -> pd.DataFrame:
         """Latest valuation metrics for every ticker in a sub-industry,

@@ -2,20 +2,25 @@
 Aggregation pipeline.
 
 Runs once per data-pipeline invocation (same as the original), fetching raw
-per-ticker data already written by ingestion, deriving industry-level and
-YoY series with the pure functions in `transforms/time_series.py`, and
-writing the results back as materialized tables. The dashboard never calls
-into this module directly — it only ever reads the tables this writes.
+per-ticker data already written by ingestion, deriving valuation clusters,
+industry-level series, and YoY series with the pure functions in
+`clustering.py` and `transforms/time_series.py`, and writing the results
+back as materialized tables. The dashboard never calls into this module
+directly — it only ever reads the tables this writes.
 
 Replaces `db_utils.update_ticker_yoy_aggregations()` and
-`db_utils.update_industry_aggregations()`, and the SQL in `data/queries.py`
-that backed them.
+`db_utils.update_industry_aggregations()` (and the SQL in `data/queries.py`
+that backed them), plus the clustering portion of `data/main.py`'s
+`create_aggregations_data()`.
 """
 from __future__ import annotations
 
 import logging
+from datetime import date
 
+from .clustering import create_valuation_clusters
 from .models import (
+    ClusterMembership,
     CompanyInfo,
     IndustryMetrics,
     IndustryMetricsYoY,
@@ -40,6 +45,10 @@ TICKER_PRICE_COLS = ["close_price", "close_price_indexed"]
 QUARTERLY_METRIC_COLS = [
     "basic_eps", "operating_income", "net_income",
     "gross_margin", "operating_margin", "net_margin", "ebitda_margin",
+]
+CLUSTER_COLS = [
+    "price_eps_ratio", "latest_eps", "return_on_equity",
+    "enterprise_to_ebitda", "debt_to_equity_ratio", "profit_margin",
 ]
 
 
@@ -134,11 +143,48 @@ def refresh_industry_metrics_yoy(repo: Repository) -> int:
     return written
 
 
+def refresh_valuation_clusters(
+    repo: Repository,
+    eps: float = 0.5,
+    min_samples: int = 3,
+    as_of: date | None = None,
+) -> int:
+    """Run DBSCAN valuation clustering for every sub-industry currently
+    represented in company_info, and materialize the result to
+    cluster_table.
+
+    Sub-industries are read directly from the data already ingested
+    (`CompanyInfo.sub_industry`) rather than requiring the caller to pass a
+    `ticker_subindustry_map`, as the original `create_aggregations_data()`
+    did — this module only needs to know which sub-industries exist, which
+    the database already knows once ingestion has run.
+
+    Writes with `mode="ignore"`, same as the original: if clustering has
+    already run today for a ticker, a second run within the same day is a
+    no-op for that row rather than overwriting it.
+    """
+    as_of = as_of or date.today()
+    company_info = repo.fetch_dataframe(CompanyInfo)
+    sub_industries = company_info["sub_industry"].dropna().unique().tolist()
+
+    total_written = 0
+    for sub_industry in sub_industries:
+        metrics = repo.recent_metrics_by_subindustry(sub_industry)
+        if metrics.empty:
+            continue
+        clustered = create_valuation_clusters(metrics, CLUSTER_COLS, eps=eps, min_samples=min_samples)
+        clustered["date"] = as_of
+        total_written += repo.upsert_dataframe(ClusterMembership, clustered, mode="ignore")
+
+    logger.info("Refreshed cluster_table: %d rows across %d sub-industries", total_written, len(sub_industries))
+    return total_written
+
+
 def run_all(repo: Repository) -> None:
     """Refresh every materialized aggregate table, in dependency order.
-    This is the direct replacement for the aggregation portion of
-    `data/main.py`'s `create_aggregations_data()` (clustering is handled
-    separately — see data/clustering.py once that module exists)."""
+    This is the direct replacement for `data/main.py`'s
+    `create_aggregations_data()`."""
+    refresh_valuation_clusters(repo)
     refresh_ticker_price_yoy(repo)
     refresh_ticker_metric_yoy(repo)
     refresh_industry_price_series(repo)
