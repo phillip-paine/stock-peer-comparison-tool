@@ -27,14 +27,22 @@ from peer_comparison_tool.data.repository import Repository
 logger = logging.getLogger(__name__)
 
 
-def build_ticker_subindustry_map(gics_sector: str | None = None) -> dict[str, str]:
+def build_ticker_subindustry_map(
+        gics_sector: str | None = None, gics_sub_industry: str | None = None
+) -> dict[str, str]:
     """Ticker -> GICS sub-industry, sourced from the cached S&P 500
-    constituent list. Optionally filtered to one GICS sector — the original
-    controlled this by commenting/uncommenting lines at the bottom of
-    main.py; here it's a runtime parameter instead.
+    constituent list. Optionally filtered to one GICS sector, or narrower
+    still to one GICS sub-industry — the level comparisons/clustering
+    actually operate at, since a whole sector (e.g. "Information
+    Technology") spans wildly different businesses (software, hardware,
+    semiconductors, IT services, ...) that aren't meaningfully comparable
+    to each other. The original controlled this by commenting/uncommenting
+    lines at the bottom of main.py; here they're runtime parameters instead.
     """
     df = load_company_names()
-    if gics_sector:
+    if gics_sub_industry:
+        df = df[df["GICS Sub-Industry"] == gics_sub_industry]
+    elif gics_sector:
         df = df[df["GICS Sector"] == gics_sector]
     return dict(zip(df["Symbol"], df["GICS Sub-Industry"]))
 
@@ -46,11 +54,19 @@ def build_ticker_subindustry_map(gics_sector: str | None = None) -> dict[str, st
          "Defaults to the built-in TICKERS list if omitted.",
 )
 @click.option(
-    "--gics-sector", default=None,
-    help="Restrict to one GICS sector from the S&P 500 constituent list, "
-         "e.g. 'Health Care'. Ignored if --tickers is given.",
+    "--gics-sub-industry", default=None,
+    help="Restrict to one GICS sub-industry from the S&P 500 constituent list, "
+         "e.g. 'Systems Software'. This is the level comparisons/clustering are "
+         "actually meaningful at. Ignored if --tickers is given; takes priority "
+         "over --gics-sector if both are given.",
 )
-def run(tickers: str | None, gics_sector: str | None) -> None:
+@click.option(
+    "--gics-sector", default=None,
+    help="Restrict to one GICS sector (broader than sub-industry -- spans many "
+         "different kinds of business) from the S&P 500 constituent list, "
+         "e.g. 'Health Care'. Ignored if --tickers or --gics-sub-industry is given.",
+)
+def run(tickers: str | None, gics_sub_industry: str | None, gics_sector: str | None) -> None:
     """Fetch, transform, and persist stock/asset-class data, then refresh
     the materialized aggregate tables."""
     logging.basicConfig(level=logging.INFO)
@@ -58,8 +74,8 @@ def run(tickers: str | None, gics_sector: str | None) -> None:
     if tickers:
         ticker_list = [t.strip() for t in tickers.split(",") if t.strip()]
         ticker_subindustry_map = {t: "Misc." for t in ticker_list}
-    elif gics_sector:
-        ticker_subindustry_map = build_ticker_subindustry_map(gics_sector)
+    elif gics_sub_industry or gics_sector:
+        ticker_subindustry_map = build_ticker_subindustry_map(gics_sector, gics_sub_industry)
     else:
         ticker_subindustry_map = {t: "Misc." for t in TICKERS}
 
