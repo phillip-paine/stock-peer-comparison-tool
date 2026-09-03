@@ -44,8 +44,8 @@ def get_landing_page_layout_v2(economic_data: pd.DataFrame):
                         dbc.NavLink("Yearly Balance Statememt", href="/balance-sheet-report-ts-data", active="exact"),
                         dbc.NavLink("Company Overviews", href="/company-stock-overview-data", active="exact"),
                         dbc.NavLink("Biggest Price Movers", href="/winners-and-losers", active="exact"),
-                        dbc.NavLink("Compass Chat", href="/compass-chat", active="exact")
-                        # dbc.NavLink("Discounted Cashflow Model", href="/company-discounted-cashflow-calculation", active="exact"),
+                        dbc.NavLink("Compass Chat", href="/compass-chat", active="exact"),
+                        dbc.NavLink("Discounted Cashflow Model", href="/company-discounted-cashflow-calculation", active="exact"),
                     ],
                     vertical=True,
                     pills=True,
@@ -214,12 +214,12 @@ def get_landing_page_layout():
                     color="primary",
                     style={'backgroundColor': colors['primary']}
                 ),
-                # dbc.Button(
-                #     "Discounted Cash Flow Evaluation",
-                #     id="company-discounted-cashflow-calculation-page-button",
-                #     color="primary",
-                #     style={'backgroundColor': colors['primary']}
-                # ),
+                dbc.Button(
+                    "Discounted Cash Flow Evaluation",
+                    id="company-discounted-cashflow-calculation-page-button",
+                    color="primary",
+                    style={'backgroundColor': colors['primary']}
+                ),
             ], className="text-center", style={'marginTop': '20px'})
         ], style={'backgroundColor': colors['background'], 'color': colors['text']})
     ])

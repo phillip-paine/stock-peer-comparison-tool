@@ -38,6 +38,7 @@ import pandas as pd
 from src.peer_comparison_tool.data.models import (
     AssetClassTimeSeries,
     BalanceSheetData,
+    CashflowStatementData,
     CompanyInfo,
     IndustryMetricsYoY,
     IndustryTimeSeries,
@@ -85,6 +86,11 @@ SNAPSHOT_METRIC_RENAMES = {
     "enterprise_to_ebitda": "enterpriseToEbitda",
 }
 
+# discounted_cashflow_model_page.py references this as a literal string.
+CASHFLOW_RENAMES = {
+    "free_cash_flow": "Free Cash Flow",
+}
+
 
 @dataclass
 class DashboardData:
@@ -102,6 +108,7 @@ class DashboardData:
     industry_metrics_yoy_data: pd.DataFrame
     qfin_data: pd.DataFrame
     bs_data: pd.DataFrame
+    cashflow_map: dict[str, pd.DataFrame]
 
 
 def load_dashboard_data(repo: Repository) -> DashboardData:
@@ -128,6 +135,8 @@ def load_dashboard_data(repo: Repository) -> DashboardData:
 
     bs_data = _load_balance_sheet(repo, company_info)
 
+    cashflow_map = _load_cashflow_map(repo)
+
     return DashboardData(
         company_info=company_info,
         economic_data=economic_data,
@@ -139,6 +148,7 @@ def load_dashboard_data(repo: Repository) -> DashboardData:
         industry_metrics_yoy_data=industry_metrics_yoy_data,
         qfin_data=qfin_data,
         bs_data=bs_data,
+        cashflow_map=cashflow_map,
     )
 
 
@@ -269,3 +279,20 @@ def _load_balance_sheet(repo: Repository, company_info: pd.DataFrame) -> pd.Data
     bs_data = bs_data.merge(company_info, on="ticker", how="left")
     bs_data = bs_data.rename(columns=BALANCE_SHEET_RENAMES)
     return bs_data
+
+
+def _load_cashflow_map(repo: Repository) -> dict[str, pd.DataFrame]:
+    """Per-ticker free-cash-flow history, sorted ascending by date and
+    indexed on `date` (the discounted-cashflow page reads the *latest* row
+    as `.iloc[-1]`, which requires ascending order, and does
+    `.reset_index(names=['date'])`, which requires `date` to be the index —
+    both preserved here to match what that page expects).
+
+    Returned as a dict keyed by ticker rather than one merged frame, since
+    the DCF page only ever looks up one ticker's history at a time — no
+    need to carry every other ticker's rows along for a single calculation.
+    """
+    cashflow = repo.fetch_dataframe(CashflowStatementData)
+    cashflow = cashflow.rename(columns=CASHFLOW_RENAMES)
+    cashflow = cashflow.sort_values(["ticker", "date"])
+    return {ticker: group.set_index("date") for ticker, group in cashflow.groupby("ticker")}

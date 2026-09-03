@@ -1,21 +1,43 @@
+"""
+Discounted cash flow (DCF) scenario page.
+
+Pure calculation logic lives in `data.transforms.dcf` (same pattern as
+`pairs_trading.py` -- extracted so it's testable without a Dash app). This
+file is layout + callback wiring only; see that module's docstring for the
+two valuation bugs found and fixed in the actual math.
+
+Bugs found and fixed here, in the wiring itself:
+
+- `list(latest_ev_data['ticker'].unique)` -- missing `()` on `.unique`, and
+  separately, `latest_ev_data` (as loaded by `data_loader.py`) is indexed
+  by ticker rather than having a `ticker` column, so this line couldn't
+  have worked either way. The dropdown is now built from `cashflow_map`
+  instead -- the actual thing that determines whether a DCF can be run for
+  a given ticker (you need cash flow history to forecast from).
+- `cashflow_map.get(ticker).reset_index(...)` ran *before* the
+  `if df_cashflow is None:` check meant to catch a missing ticker -- so
+  that check could never actually fire; the crash would already have
+  happened on the line above it. Reordered.
+"""
+from __future__ import annotations
+
 import dash
-from dash import html, dash_table, dcc
 import dash_bootstrap_components as dbc
-import plotly.express as px
-import os
-import plotly.graph_objects as go
-from .styles import colors
-from .constants import DOWNLOAD_DIR
-from dateutil.relativedelta import relativedelta
-
 import pandas as pd
+import plotly.express as px
+from dash import dcc, html
 
-from .layout import create_container, create_header
-CF_FUTURE_YEARS = 5
+from src.peer_comparison_tool.data.transforms.dcf import compute_dcf_scenarios
+
+from .styles import colors
+
+_EMPTY_FIGURE = px.line(title="Select a ticker and click \"Calculate DCF\"")
 
 
-def get_discounted_cashflow_model_page_layout(latest_ev_data):
-    unique_ticker_list = list(latest_ev_data['ticker'].unique)
+def get_discounted_cashflow_model_page_layout(cashflow_map: dict[str, pd.DataFrame]) -> dbc.Container:
+    ticker_options = sorted(cashflow_map.keys())
+    default_ticker = ticker_options[0] if ticker_options else None
+
     return dbc.Container([
         dbc.Row([
             dbc.Col(
@@ -30,8 +52,8 @@ def get_discounted_cashflow_model_page_layout(latest_ev_data):
                 html.Label("Select Company:", style={'color': colors['text']}),
                 dcc.Dropdown(
                     id='company-dropdown',
-                    options=[{'label': ticker, 'value': ticker} for ticker in unique_ticker_list],
-                    value=unique_ticker_list[0],  # Default selection - jut pick first ticker
+                    options=[{'label': ticker, 'value': ticker} for ticker in ticker_options],
+                    value=default_ticker,
                     multi=False,
                     searchable=True,
                     placeholder="Select ticker...",
@@ -69,12 +91,24 @@ def get_discounted_cashflow_model_page_layout(latest_ev_data):
             ])
         ]),
 
+        dbc.Row(
+            dbc.Col(
+                dbc.Alert(
+                    "Illustrative only, not investment advice. A discounted cash flow model is highly sensitive "
+                    "to the growth/discount/terminal rate assumptions above, and the terminal value (usually most "
+                    "of the total) depends on the discount rate staying above the terminal growth rate -- if a "
+                    "scenario below shows \"invalid inputs\", that scenario's rates violate that.",
+                    color="warning", style={"margin": "15px 0"},
+                ), width=12,
+            )
+        ),
+
         # Plot Cashflow and DCF over time and show discounted cash flow values:
         dbc.Row([
             dbc.Col([
                 html.H5("Present Value Cash Flow Growth"),
                 dbc.Card([
-                    dcc.Graph(id="cash-flow-growth-plot")
+                    dcc.Graph(id="cash-flow-growth-plot", figure=_EMPTY_FIGURE)
                 ], style={'backgroundColor': colors['background']}),
             ], width=8),
             dbc.Col([
@@ -114,7 +148,9 @@ def get_discounted_cashflow_model_page_layout(latest_ev_data):
     ], fluid=True, style={'backgroundColor': colors['background']})
 
 
-def register_discounted_cashflow_model_page_callbacks(app, cashflow_map, latest_ev):
+def register_discounted_cashflow_model_page_callbacks(
+    app: dash.Dash, cashflow_map: dict[str, pd.DataFrame], latest_ev: pd.DataFrame
+) -> None:
     @app.callback(
         dash.dependencies.Output('ev-value', 'children'),
         dash.dependencies.Output('base-percentage-error', 'children'),
@@ -131,75 +167,61 @@ def register_discounted_cashflow_model_page_callbacks(app, cashflow_map, latest_
         dash.dependencies.State('discount-rate-input', 'value')
     )
     def calculate_dcf(n_clicks, ticker, growth_rate, terminal_rate, discount_rate):
-        if n_clicks is None:
-            return ""
+        empty_style = {"color": colors["text"]}
+        empty_result = ("", "", "", "", empty_style, empty_style, empty_style, _EMPTY_FIGURE)
 
-        # Fetch financial data and calculate DCF
-        df_cashflow = cashflow_map.get(ticker).reset_index(names=['date'])
+        if not n_clicks or not ticker:
+            return empty_result
+
+        df_cashflow = cashflow_map.get(ticker)
         if df_cashflow is None:
-            return ""
+            return "No cash flow data for this ticker", "", "", "", empty_style, empty_style, empty_style, _EMPTY_FIGURE
+        df_cashflow = df_cashflow.reset_index(names=['date'])
 
-        # Now we want the three scenarios:
-        # Example calculation (simplified)
         start_date = df_cashflow['date'].iloc[-1] + pd.DateOffset(years=1)
-        latest_free_cashflow = df_cashflow['Free Cash Flow'].iloc[-1]  # we want the latest value as ordered
+        latest_free_cashflow = df_cashflow['Free Cash Flow'].iloc[-1]  # latest value, frame is sorted ascending
 
-        df_forecast_cf, forecast_discounted_cf, forecast_discounted_terminal_value = \
-            create_forecast_cashflow_dataframe(latest_free_cashflow, growth_rate, discount_rate, terminal_rate, start_date)
-        df_bear_forecast_cf, low_forecast_discounted_cf, low_forecast_discounted_terminal_value = \
-            create_forecast_cashflow_dataframe(latest_free_cashflow, growth_rate*0.8, discount_rate*1.1, terminal_rate*0.8, start_date)
-        df_bear_forecast_cf.rename(columns={'Discounted Forecast Free Cash Flow': 'Bear Discounted Forecast FCF'}, inplace=True)
-        df_bull_forecast_cf, high_forecast_discounted_cf, high_forecast_discounted_terminal_value = \
-            create_forecast_cashflow_dataframe(latest_free_cashflow, growth_rate*1.2, discount_rate*0.9, terminal_rate*1.2, start_date)
-        df_bull_forecast_cf.rename(columns={'Discounted Forecast Free Cash Flow': 'Bull Discounted Forecast FCF'}, inplace=True)
+        scenarios = compute_dcf_scenarios(latest_free_cashflow, growth_rate, discount_rate, terminal_rate, start_date)
 
-        df_ts_plot = pd.concat([df_cashflow[['date', 'Free Cash Flow']], df_forecast_cf,
-                                df_bear_forecast_cf, df_bull_forecast_cf])
+        if "error" in scenarios["base"]:
+            message = f"Base scenario: {scenarios['base']['error']}"
+            return message, "", "", "", empty_style, empty_style, empty_style, _EMPTY_FIGURE
 
+        forecast_frames = [df_cashflow[['date', 'Free Cash Flow']]]
+        for name, rename_to in [("base", "Discounted Forecast Free Cash Flow"),
+                                 ("bear", "Bear Discounted Forecast FCF"),
+                                 ("bull", "Bull Discounted Forecast FCF")]:
+            scenario = scenarios[name]
+            if "error" in scenario:
+                continue
+            frame = scenario["cashflow_df"].rename(columns={"Discounted Forecast Free Cash Flow": rename_to})
+            forecast_frames.append(frame)
+
+        df_ts_plot = pd.concat(forecast_frames)
         df_ts_plot['year'] = df_ts_plot['date'].dt.year.astype(str)
-        df_ts_plot = df_ts_plot.melt(id_vars='year', value_vars=['Free Cash Flow', 'Discounted Forecast Free Cash Flow',
-                                                                 'Bear Discounted Forecast FCF', 'Bull Discounted Forecast FCF'],
-                                     var_name='Cash Flow Type', value_name='Value')
-        # Now lets add the calculated free cash flow values forecast:
+        value_cols = [c for c in ['Free Cash Flow', 'Discounted Forecast Free Cash Flow',
+                                   'Bear Discounted Forecast FCF', 'Bull Discounted Forecast FCF']
+                      if c in df_ts_plot.columns]
+        df_ts_plot = df_ts_plot.melt(id_vars='year', value_vars=value_cols,
+                                      var_name='Cash Flow Type', value_name='Value')
         cashflow_ts_plot = px.line(df_ts_plot, x='year', y='Value', color='Cash Flow Type',
-                                   title="Historical Cash Flow and Discounted Forecast Cash Flow Growth Over Time")
+                                    title="Historical Cash Flow and Discounted Forecast Cash Flow Growth Over Time")
 
-        # And calculate the DCF:
-        base_dcf_value = int(forecast_discounted_cf + forecast_discounted_terminal_value)
-        low_dcf_value = int(low_forecast_discounted_cf + forecast_discounted_terminal_value)
-        high_dcf_value = int(high_forecast_discounted_cf + forecast_discounted_terminal_value)
-        # dcf_value_str = f"{int((forecast_discounted_cf + forecast_discounted_terminal_value) / 1_000_000)} mm"
-
-        ev_value_str = f"{int(latest_ev.loc[ticker, 'enterprise_value'] / 1_000_000)} mm"
         ev_value = latest_ev.loc[ticker, 'enterprise_value']
+        ev_value_str = f"{int(ev_value / 1_000_000)} mm"
 
-        base_percentage_error = round((base_dcf_value - ev_value) / ev_value * 100, 2)
-        low_percentage_error = round((low_dcf_value - ev_value) / ev_value * 100, 2)
-        high_percentage_error = round((high_dcf_value - ev_value) / ev_value * 100, 2)
+        def percentage_error_and_style(scenario_name):
+            scenario = scenarios[scenario_name]
+            if "error" in scenario:
+                return "n/a (invalid inputs)", empty_style
+            pct_error = round((scenario['dcf_value'] - ev_value) / ev_value * 100, 2)
+            return f"{pct_error}", {"color": determine_color(pct_error)}
 
-        bear_colour = {"color": determine_color(low_percentage_error)}
-        bull_colour = {"color": determine_color(high_percentage_error)}
-        mid_colour = {"color": determine_color(base_percentage_error)}
+        base_text, base_style = percentage_error_and_style("base")
+        bear_text, bear_style = percentage_error_and_style("bear")
+        bull_text, bull_style = percentage_error_and_style("bull")
 
-        return ev_value_str, f"{base_percentage_error}", f"{low_percentage_error}", f"{high_percentage_error}", \
-            mid_colour, bear_colour, bull_colour, cashflow_ts_plot
-
-
-def create_forecast_cashflow_dataframe(latest_free_cashflow, growth_rate, discount_rate, terminal_rate, calculation_date):
-    future_cashflows = []
-    discounted_future_cashflows = []
-    for year in range(1, CF_FUTURE_YEARS + 1):
-        future_cashflows.append(latest_free_cashflow*((1 + growth_rate/100) ** year))
-        discounted_future_cashflows.append(future_cashflows[-1] / ((1 + discount_rate / 100) ** year))
-    terminal_value = future_cashflows[-1] * (1 + terminal_rate / 100) / (discount_rate - terminal_rate)
-    discounted_terminal_value = terminal_value / ((1 + discount_rate / 100) ** CF_FUTURE_YEARS)
-    total_discounted_future_cashflows = sum(discounted_future_cashflows)
-
-    # Cash flow ts: add the forecast cashflow to the historical cashflows
-
-    df_future_cashflow = pd.DataFrame({"date": pd.date_range(calculation_date.strftime("%Y-%m-%d"), periods=CF_FUTURE_YEARS, freq='Y'),
-                                       "Discounted Forecast Free Cash Flow": discounted_future_cashflows})
-    return df_future_cashflow, total_discounted_future_cashflows, discounted_terminal_value
+        return ev_value_str, base_text, bear_text, bull_text, base_style, bear_style, bull_style, cashflow_ts_plot
 
 
 def determine_color(value):

@@ -12,6 +12,7 @@ from src.peer_comparison_tool.comparison_tool.data_loader import load_dashboard_
 from src.peer_comparison_tool.data.models import (
     AssetClassTimeSeries,
     BalanceSheetData,
+    CashflowStatementData,
     ClusterMembership,
     CompanyInfo,
     IndustryMetricsYoY,
@@ -222,3 +223,45 @@ def test_yoy_metric_renames_applied_to_ticker_and_industry_frames(session):
     expected_cols = {"Basic EPS YoY", "Net Income YoY", "Operating Income YoY", "Gross Margin YoY", "Net Margin YoY"}
     assert expected_cols.issubset(data.ticker_metric_yoy_data.columns)
     assert expected_cols.issubset(data.industry_metrics_yoy_data.columns)
+
+
+def test_cashflow_map_keyed_by_ticker_sorted_ascending_with_date_index(session):
+    repo = Repository(session)
+    _seed_company_info(repo)
+    repo.upsert(TickerMostRecentMetric, [])
+    repo.upsert(ClusterMembership, [])
+    repo.upsert(QuarterlyFinancialData, [])
+    repo.upsert(BalanceSheetData, [])
+    repo.upsert(
+        CashflowStatementData,
+        [
+            # Deliberately inserted out of date order to check sorting.
+            {"ticker": "AAA", "date": date(2024, 6, 30), "free_cash_flow": 200.0,
+             "operating_cash_flow": 250.0, "capital_expenditure": -50.0},
+            {"ticker": "AAA", "date": date(2024, 3, 31), "free_cash_flow": 100.0,
+             "operating_cash_flow": 150.0, "capital_expenditure": -50.0},
+        ],
+    )
+    session.commit()
+
+    data = load_dashboard_data(repo)
+
+    assert set(data.cashflow_map.keys()) == {"AAA"}
+    aaa = data.cashflow_map["AAA"]
+    assert aaa.index.name == "date"
+    assert list(aaa.index) == [date(2024, 3, 31), date(2024, 6, 30)]
+    assert list(aaa["Free Cash Flow"]) == [100.0, 200.0]
+
+
+def test_cashflow_map_empty_when_no_data(session):
+    repo = Repository(session)
+    _seed_company_info(repo)
+    repo.upsert(TickerMostRecentMetric, [])
+    repo.upsert(ClusterMembership, [])
+    repo.upsert(QuarterlyFinancialData, [])
+    repo.upsert(BalanceSheetData, [])
+    session.commit()
+
+    data = load_dashboard_data(repo)
+
+    assert data.cashflow_map == {}

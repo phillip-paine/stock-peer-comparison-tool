@@ -54,6 +54,10 @@ from .company_quarterly_report_page import (
     register_quarterly_report_page_callbacks,
 )
 from .data_loader import load_dashboard_data
+from .discounted_cashflow_model_page import (
+    get_discounted_cashflow_model_page_layout,
+    register_discounted_cashflow_model_page_callbacks,
+)
 from .individual_company_overview_page import (
     get_individual_company_overview_page_layout,
     register_individual_company_overview_callback,
@@ -99,11 +103,8 @@ def create_app() -> dash.Dash:
         # are actually importable.
         # elif pathname == "/compass-chat":
         #     return get_chat_page_layout()
-        # TODO(dcf): re-enable once cashflow_map is wired through data_loader.
-        # latest_enterprise_value is already available on `data` for when
-        # this comes back.
-        # elif pathname == '/company-discounted-cashflow-calculation':
-        #     return get_discounted_cashflow_model_page_layout(cashflow_map, data.latest_enterprise_value)
+        elif pathname == '/company-discounted-cashflow-calculation':
+            return get_discounted_cashflow_model_page_layout(data.cashflow_map)
         else:
             return get_landing_page_layout_v2(economic_data=data.economic_data)
 
@@ -138,10 +139,10 @@ def create_app() -> dash.Dash:
             return "/company-stock-overview-data"
         elif button_id == "biggest-winners-and-losers-page-button":
             return "/winners-and-losers"
+        elif button_id == 'company-discounted-cashflow-calculation-page-button':
+            return '/company-discounted-cashflow-calculation'
         # elif button_id == "agent-chat-page-button":
         #     return "/compass-chat"
-        # elif button_id == 'company-discounted-cashflow-calculation-page-button':
-        #     return '/company-discounted-cashflow-calculation'
         else:
             return "/"
 
@@ -154,8 +155,8 @@ def create_app() -> dash.Dash:
         data.industry_series_data, data.industry_metrics_yoy_data,
     )
     register_winners_and_losers_callback(app, data.ticker_series_data)
+    register_discounted_cashflow_model_page_callbacks(app, data.cashflow_map, data.latest_enterprise_value)
     # register_agent_chat_callback(app)  # see module docstring
-    # register_discounted_cashflow_model_page_callbacks(app, cashflow_map, data.latest_enterprise_value)
 
     @app.callback(
         Output("url", "pathname", allow_duplicate=True),
