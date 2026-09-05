@@ -21,6 +21,16 @@ def _env_path(var_name: str, default: Path) -> Path:
     return Path(raw).expanduser() if raw else default
 
 
+def _env_int(var_name: str, default: int) -> int:
+    raw = os.getenv(var_name)
+    return int(raw) if raw else default
+
+
+def _env_float(var_name: str, default: float) -> float:
+    raw = os.getenv(var_name)
+    return float(raw) if raw else default
+
+
 @dataclass(frozen=True)
 class DataConfig:
     """Immutable settings for data retrieval and storage.
@@ -57,6 +67,18 @@ class DataConfig:
 
     # yfinance history window for price series.
     price_history_period: str = "2y"
+
+    # Asset-class (index/ETF/commodity/FX) price history is fetched in
+    # yfinance batch calls rather than one call per symbol, but a single
+    # call covering every asset symbol at once has previously triggered
+    # Yahoo's rate limiter for the whole batch together. Split into
+    # smaller chunks, with a pause between chunks, instead.
+    asset_fetch_chunk_size: int = field(
+        default_factory=lambda: _env_int("PCT_ASSET_FETCH_CHUNK_SIZE", 5)
+    )
+    asset_fetch_chunk_delay_seconds: float = field(
+        default_factory=lambda: _env_float("PCT_ASSET_FETCH_CHUNK_DELAY_SECONDS", 2.0)
+    )
 
     @property
     def sp500_ticker_csv(self) -> Path:

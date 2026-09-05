@@ -69,19 +69,39 @@ def load_company_names() -> pd.DataFrame:
     return pd.read_csv(settings.sp500_ticker_csv)
 
 
+def _extract_single_ticker_history(batch: pd.DataFrame | None, ticker: str) -> pd.DataFrame:
+    """Slice one ticker's OHLCV columns out of a (field, ticker) multi-symbol
+    batch frame (as returned by `fetch_multi_symbol_history`), and flatten
+    back to the single-level-column shape `transform_price_history()`
+    expects — the same shape a lone `Ticker(ticker).history()` call would
+    have returned. Returns an empty frame if the batch doesn't have this
+    ticker at all (e.g. its chunk failed and was skipped) or if `batch`
+    itself is `None` (the whole batched fetch failed)."""
+    if batch is None or ticker not in batch.columns.get_level_values(1):
+        return pd.DataFrame()
+    return batch.xs(ticker, level=1, axis=1).dropna(how="all")
+
+
 def ingest_ticker(
-    client: YFinanceClient,
-    repo: Repository,
-    ticker: str,
-    sub_industry: str,
-    company_names: pd.DataFrame,
+        client: YFinanceClient,
+        repo: Repository,
+        ticker: str,
+        sub_industry: str,
+        company_names: pd.DataFrame,
+        price_history_raw: pd.DataFrame | None = None,
 ) -> bool:
     """Fetch, transform, and persist everything for one ticker.
+
+    `price_history_raw` lets a caller pass in price data already fetched as
+    part of a batched multi-ticker call (see `ingest_tickers`) instead of
+    this function fetching it itself one ticker at a time — pass `None`
+    (the default) to fall back to the original per-ticker
+    `client.fetch_price_history(ticker)` call, e.g. for standalone/test use.
 
     Returns True if the ticker had usable data and was written, False if it
     was skipped. A ticker is skipped if the required financial statements
     are unavailable (delisted/invalid symbol) or if `Ticker.info` has no
-    sector (the original's proxy for "not a valid equity").
+    sector (the original's proxy for \"not a valid equity\").
     """
     try:
         balance_sheet_raw = client.fetch_balance_sheet(ticker)
@@ -117,14 +137,19 @@ def ingest_ticker(
         ticker=ticker,
         description="cashflow",
     )
-    price_history = _fetch_and_transform(
-        lambda: transform_price_history(
-            client.fetch_price_history(ticker, period=settings.price_history_period), ticker
-        ),
-        empty=transform_price_history(pd.DataFrame(), ticker),
-        ticker=ticker,
-        description="price history",
-    )
+    if price_history_raw is not None:
+        # Already fetched as part of a batched multi-ticker call -- just
+        # transform it, no network call (and nothing to retry) here.
+        price_history = transform_price_history(price_history_raw, ticker)
+    else:
+        price_history = _fetch_and_transform(
+            lambda: transform_price_history(
+                client.fetch_price_history(ticker, period=settings.price_history_period), ticker
+            ),
+            empty=transform_price_history(pd.DataFrame(), ticker),
+            ticker=ticker,
+            description="price history",
+        )
 
     # CompanyInfo must be written first: every other table below has a
     # foreign key on ticker -> company_info.ticker, and that FK is enforced.
@@ -138,11 +163,11 @@ def ingest_ticker(
 
 
 def ingest_tickers(
-    client: YFinanceClient,
-    repo: Repository,
-    ticker_subindustry_map: Dict[str, str],
-    max_age_days: int | None = None,
-    company_names: pd.DataFrame | None = None,
+        client: YFinanceClient,
+        repo: Repository,
+        ticker_subindustry_map: Dict[str, str],
+        max_age_days: int | None = None,
+        company_names: pd.DataFrame | None = None,
 ) -> List[str]:
     """Ingest every ticker in `ticker_subindustry_map` that isn't already
     recently fetched. Returns the tickers actually (re)fetched.
@@ -150,12 +175,49 @@ def ingest_tickers(
     max_age_days = settings.ticker_recency_days if max_age_days is None else max_age_days
     company_names = load_company_names() if company_names is None else company_names
 
+    stale_tickers = [
+        ticker for ticker in ticker_subindustry_map
+        if not repo.is_data_recent(ticker, max_age_days=max_age_days)
+    ]
+    if not stale_tickers:
+        return []
+
+    # Batch-fetch price history for every stale ticker in one (chunked)
+    # pass, rather than a separate Ticker(t).history() call per ticker
+    # inside the loop below -- looping one ticker at a time is exactly the
+    # pattern that triggers Yahoo's rate limiter almost immediately.
+    # Balance sheet/quarterly financials/cashflow/info have no equivalent
+    # yfinance batch endpoint, so those stay per-ticker inside ingest_ticker.
+    #
+    # If the batch call fails entirely (every chunk exhausted its retries),
+    # this run proceeds with no price history for any stale ticker rather
+    # than falling back to a per-ticker fetch loop -- that fallback would
+    # just recreate the exact one-call-per-ticker pattern this batching
+    # exists to avoid, right after Yahoo has already shown signs of
+    # rate-limiting. Price history is supplementary (see
+    # _fetch_and_transform's docstring), so this doesn't lose the ticker
+    # entirely; a later pipeline run will pick prices up once the pipeline
+    # decides this ticker's data is stale enough to refetch.
+    try:
+        price_history_batch = client.fetch_multi_symbol_history(
+            stale_tickers,
+            period=settings.price_history_period,
+            chunk_size=settings.asset_fetch_chunk_size,
+            chunk_delay_seconds=settings.asset_fetch_chunk_delay_seconds,
+        )
+    except DataRetrievalError as exc:
+        logger.warning(
+            "Batched price history fetch failed entirely for all %d stale ticker(s); "
+            "proceeding without price history this run rather than retrying per-ticker: %s",
+            len(stale_tickers), exc,
+        )
+        price_history_batch = None
+
     fetched: List[str] = []
-    for ticker, sub_industry in ticker_subindustry_map.items():
-        if repo.is_data_recent(ticker, max_age_days=max_age_days):
-            logger.debug("Skipping %s: data is recent", ticker)
-            continue
-        if ingest_ticker(client, repo, ticker, sub_industry, company_names):
+    for ticker in stale_tickers:
+        sub_industry = ticker_subindustry_map[ticker]
+        price_history_raw = _extract_single_ticker_history(price_history_batch, ticker)
+        if ingest_ticker(client, repo, ticker, sub_industry, company_names, price_history_raw=price_history_raw):
             fetched.append(ticker)
 
     if fetched:
@@ -164,9 +226,9 @@ def ingest_tickers(
 
 
 def ingest_asset_classes(
-    client: YFinanceClient,
-    repo: Repository,
-    max_age_days: int | None = None,
+        client: YFinanceClient,
+        repo: Repository,
+        max_age_days: int | None = None,
 ) -> List[str]:
     """Fetch/transform/persist the non-stock asset universe (commodities,
     indices, ETFs, FX), skipping symbols already fetched recently. Returns
@@ -179,7 +241,12 @@ def ingest_asset_classes(
         return []
 
     try:
-        raw = client.fetch_multi_asset_history(stale_symbols, period=settings.price_history_period)
+        raw = client.fetch_multi_symbol_history(
+            stale_symbols,
+            period=settings.price_history_period,
+            chunk_size=settings.asset_fetch_chunk_size,
+            chunk_delay_seconds=settings.asset_fetch_chunk_delay_seconds,
+        )
     except DataRetrievalError as exc:
         logger.warning("Skipping asset-class refresh: %s", exc)
         return []
@@ -191,9 +258,9 @@ def ingest_asset_classes(
 
 
 def run_pipeline(
-    repo: Repository,
-    ticker_subindustry_map: Dict[str, str],
-    client: YFinanceClient | None = None,
+        repo: Repository,
+        ticker_subindustry_map: Dict[str, str],
+        client: YFinanceClient | None = None,
 ) -> None:
     """Full data-layer pipeline: ingest stock tickers, ingest asset classes,
     refresh every materialized aggregate table (including valuation
