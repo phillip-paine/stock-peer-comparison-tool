@@ -11,6 +11,45 @@ DISPLAY_COLS = ['name', 'ticker', 'industry', 'sub_industry', 'price_eps_ratio',
                 'latest_eps', 'profit_margin']
 NOT_METRICS = ['name', 'ticker', 'industry', 'sector', 'subsector', 'label', 'market_cap_string', 'market_cap']
 
+# Columns every chart in update_graph() needs a real (non-NaN) value for,
+# regardless of which two metrics are selected in the scatter dropdowns.
+REQUIRED_COMPARISON_COLUMNS = ["latest_eps", "price_eps_ratio", "profit_margin"]
+
+
+def _filter_and_clean(source: pd.DataFrame, metric_one: str, metric_two: str) -> pd.DataFrame:
+    """Copy `source` (never mutate the shared `data` frame every callback
+    invocation reads from) and drop rows missing any value actually needed
+    by the charts below -- REQUIRED_COMPARISON_COLUMNS plus whichever two
+    metrics are selected for the scatter chart.
+
+    Replaces `filtered_data.dropna(how='any', inplace=True)`, which had two
+    real bugs: (1) `inplace=True` on `filtered_data = data` (the "no sector
+    selected" branch) mutated the shared `data` DataFrame every page load
+    reads from, permanently shrinking it the first time this ran; (2)
+    `how='any'` dropped a row if *any* column anywhere was NaN -- including
+    hover-only fields like `enterpriseToEbitda`/`price_to_book` that have
+    nothing to do with what's actually plotted. That's what caused the
+    Financials-sector crash: a single missing metric on any ticker in a
+    selection could wipe out every row, leaving `min()`/`max()` with an
+    empty sequence to operate on downstream.
+    """
+    required = [c for c in {*REQUIRED_COMPARISON_COLUMNS, metric_one, metric_two} if c in source.columns]
+    return source.dropna(subset=required).copy()
+
+
+def _axis_range(values: pd.Series) -> list | None:
+    """Padded [min, max] range for one metric's chart axis -- min padded
+    down 10%, max padded up 10%, same fixed padding the original used.
+    Returns None (let Plotly auto-scale) if there's nothing to compute a
+    range from, instead of raising on min()/max() of an empty sequence --
+    the actual crash reported selecting a sector where every row got
+    dropped (see `_filter_and_clean`).
+    """
+    clean = values.dropna()
+    if clean.empty:
+        return None
+    return [int(clean.min() * 0.9), clean.max() * 1.1]
+
 
 def get_comparison_page_layout(data: pd.DataFrame):
     return dbc.Container([
@@ -250,26 +289,27 @@ def register_comparison_callbacks(app: dash.Dash, data: pd.DataFrame):
         # Update subsector dropdown options
         if not selected_sector:
             sub_sector_options = []
+            base_data = data
         else:
             # Filter subsectors based on the selected sector
             sub_sector_options = data[data['sector'].isin(selected_sector)]['sub_industry'].unique()
             sub_sector_options = [{'label': sub, 'value': sub} for sub in sub_sector_options]
 
-        # Filter Data for sector and sub_sector
-        if not selected_sector:
-            # If no sectors selected, show all data
-            filtered_data = data
-            # Lets drop rows with any NA for now: # TODO fix me later
-            filtered_data.dropna(how='any', inplace=True)
-        else:
-            if not selected_sub_sectors:
-                # Filter data based on selected sectors
-                filtered_data = data[data['sector'].isin(selected_sector)]
-                filtered_data.dropna(how='any', inplace=True)
+            if selected_sub_sectors:
+                base_data = data[data['sub_industry'].isin(selected_sub_sectors)]
             else:
-                # Filter data based on selected sub sectors
-                filtered_data = data[data['sub_industry'].isin(selected_sub_sectors)]
-                filtered_data.dropna(how='any', inplace=True)
+                base_data = data[data['sector'].isin(selected_sector)]
+
+        filtered_data = _filter_and_clean(base_data, metric_one, metric_two)
+
+        if filtered_data.empty:
+            # No ticker in this selection has every value these charts need
+            # (see _filter_and_clean) -- show an empty, clearly-labeled
+            # placeholder instead of crashing on min()/max() of nothing.
+            empty_fig = px.bar(title="No data for this selection")
+            empty_fig.update_layout(plot_bgcolor=colors['background'], paper_bgcolor=colors['background'],
+                                    font_color=colors['text'])
+            return sub_sector_options, [], empty_fig, empty_fig, empty_fig, empty_fig
 
         # Update DataTable
         table_data = filtered_data.sort_values(by=['price_eps_ratio'], ascending=False).to_dict('records')
@@ -306,14 +346,23 @@ def register_comparison_callbacks(app: dash.Dash, data: pd.DataFrame):
             font_color=colors['text'],
             margin=dict(l=20, r=20, t=30, b=20)
         )
-        fig3.update_layout(
+        fig3_layout_kwargs = dict(
             plot_bgcolor=colors['background'],
             paper_bgcolor=colors['background'],
             font_color=colors['text'],
             margin=dict(l=20, r=20, t=30, b=20),
-            xaxis=dict(range=[int(min(filtered_data[metric_one]) * .9), max(filtered_data[metric_one]) * 1.1]),
-            yaxis=dict(range=[int(min(filtered_data[metric_one]) * .9), max(filtered_data[metric_two]) * 1.1])
         )
+        # Both ranges used to be derived from metric_one (a copy-paste bug:
+        # the yaxis's lower bound used `min(filtered_data[metric_one])`
+        # instead of metric_two), and both crashed outright on an empty
+        # selection -- see _axis_range's docstring.
+        metric_one_range = _axis_range(filtered_data[metric_one])
+        metric_two_range = _axis_range(filtered_data[metric_two])
+        if metric_one_range is not None:
+            fig3_layout_kwargs['xaxis'] = dict(range=metric_one_range)
+        if metric_two_range is not None:
+            fig3_layout_kwargs['yaxis'] = dict(range=metric_two_range)
+        fig3.update_layout(**fig3_layout_kwargs)
 
         fig3.update_traces(textposition='bottom center', marker=dict(size=10, line=dict(width=2, color='DarkSlateGrey')), selector=dict(mode='markers+text'))
 

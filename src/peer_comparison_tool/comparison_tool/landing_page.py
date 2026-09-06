@@ -62,8 +62,8 @@ def get_landing_page_layout_v2(economic_data: pd.DataFrame):
                         html.H5('Commodity Indexed Prices', style={'color': colors['text']}),
                         dbc.Card([
                             dcc.Graph(id='commodity-price-series')
-                            ], style={'backgroundColor': colors['background']})
-                        ], width=6),
+                        ], style={'backgroundColor': colors['background']})
+                    ], width=6),
                     dbc.Col([
                         html.H5('Commodity Prices YoY', style={'color': colors['text']}),
                         dbc.Card([
@@ -159,7 +159,18 @@ def register_landing_page_data_callbacks(app, data):
             plot_data = plot_data.dropna(subset=[series])
 
         fig = px.line(plot_data, x='date', y=series, color='ticker',
-                                 title=f"Plot Of {series} For {asset} <br> Across Top Products")
+                      title=f"Plot Of {series} For {asset} <br> Across Top Products")
+
+        if plot_data.empty:
+            # A genuinely empty chart with no explanation looks identical to
+            # a slow-loading one -- label it so it's obvious this is a data
+            # availability issue (asset-class ingestion hasn't succeeded /
+            # hasn't run yet for this asset class), not a rendering bug.
+            fig.add_annotation(
+                text=f"No {asset} data available yet",
+                showarrow=False, font=dict(color=colors['text'], size=14),
+                xref="paper", yref="paper", x=0.5, y=0.5,
+            )
 
         fig.update_layout(
             plot_bgcolor=colors['background'],

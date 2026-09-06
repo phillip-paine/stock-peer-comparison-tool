@@ -21,6 +21,23 @@ Two behavioral fixes made while tracing the original:
 2. **Fragile ticker-name recovery**: not in this module (see
    `asset_classes.py`), but a related fragile string-split pattern from the
    original economics retriever is fixed there too.
+3. **Missing StockholdersEquity/OrdinarySharesNumber crashed the whole
+   pipeline run**: some tickers (financial institutions especially --
+   confirmed pulling the "Financials" sector) don't report these under
+   their usual names, and unlike `CurrentAssets`/
+   `TotalLiabilitiesNetMinorityInterest` a few lines above, there was no
+   fallback for them at all -- a plain `KeyError` on one ticker used to
+   propagate all the way up and abort the entire batch, discarding every
+   other ticker already fetched in that run. Now falls back to known
+   alternate line items (`TotalEquityGrossMinorityInterest`/
+   `CommonStockEquity` for equity, `ShareIssued` for share count), then to
+   0 if genuinely none of those are present either -- same degrade-not-crash
+   behavior the two fields above already had. Those particular alternate
+   column names are a best-effort guess at yfinance's naming for
+   non-standard reporters, not verified against a live pull; if a specific
+   ticker still comes back with the wrong ratio, print `raw.index` for that
+   ticker's `balance_sheet_raw` to see its actual field names and adjust
+   the fallback chain here.
 """
 from __future__ import annotations
 
@@ -116,17 +133,17 @@ def transform_balance_sheet(raw: pd.DataFrame, ticker: str) -> pd.DataFrame:
         # an equivalent from cash + receivables + loans.
         zeros = pd.Series(0.0, index=df.index)
         df["CurrentAssets"] = (
-            df.get("CashCashEquivalentsAndShortTermInvestments", df.get("CashAndCashEquivalents", zeros))
-            + df.get("Receivables", zeros)
-            + df.get("TotalLoans", df.get("LoansReceivables", zeros))
+                df.get("CashCashEquivalentsAndShortTermInvestments", df.get("CashAndCashEquivalents", zeros))
+                + df.get("Receivables", zeros)
+                + df.get("TotalLoans", df.get("LoansReceivables", zeros))
         )
 
     if "TotalLiabilitiesNetMinorityInterest" not in df.columns:
         zeros = pd.Series(0.0, index=df.index)
         df["TotalLiabilitiesNetMinorityInterest"] = (
-            df.get("TotalDeposits", df.get("CustomerDeposits", zeros))
-            + df.get("UnearnedPremium", zeros)
-            + df.get("AccountsPayable", zeros)
+                df.get("TotalDeposits", df.get("CustomerDeposits", zeros))
+                + df.get("UnearnedPremium", zeros)
+                + df.get("AccountsPayable", zeros)
         )
 
     # Computed unconditionally regardless of whether TotalLiabilitiesNetMinorityInterest
@@ -136,6 +153,19 @@ def transform_balance_sheet(raw: pd.DataFrame, ticker: str) -> pd.DataFrame:
         df["Quick Ratio"] = (df["CurrentAssets"] - df["Inventory"]) / df["TotalLiabilitiesNetMinorityInterest"]
     else:
         df["Quick Ratio"] = df["CurrentAssets"] / df["TotalLiabilitiesNetMinorityInterest"]
+
+    # StockholdersEquity and OrdinarySharesNumber can be absent for the same
+    # reason CurrentAssets/TotalLiabilitiesNetMinorityInterest can be above
+    # (financial institutions reporting on a different balance sheet
+    # template) -- confirmed in practice by a crash pulling the Financials
+    # sector. Same fallback approach: try known alternate line items yfinance
+    # sometimes uses instead, and fall back to 0 (not a raised error) if none
+    # are present, consistent with how the two fields above already degrade.
+    zeros = pd.Series(0.0, index=df.index)
+    if "StockholdersEquity" not in df.columns:
+        df["StockholdersEquity"] = df.get("TotalEquityGrossMinorityInterest", df.get("CommonStockEquity", zeros))
+    if "OrdinarySharesNumber" not in df.columns:
+        df["OrdinarySharesNumber"] = df.get("ShareIssued", zeros)
 
     df["Equity Ratio"] = (df["CurrentAssets"] - df["TotalLiabilitiesNetMinorityInterest"]) / df["OrdinarySharesNumber"]
     df["Debt-to-Equity Ratio"] = df["TotalLiabilitiesNetMinorityInterest"] / df["StockholdersEquity"]

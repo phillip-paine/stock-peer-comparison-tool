@@ -58,10 +58,10 @@ class Repository:
     # ---- writes -------------------------------------------------------
 
     def upsert(
-        self,
-        model: Type[Base],
-        records: Iterable[dict[str, Any]],
-        mode: UpsertMode = "ignore",
+            self,
+            model: Type[Base],
+            records: Iterable[dict[str, Any]],
+            mode: UpsertMode = "ignore",
     ) -> int:
         """Insert rows, skipping (`mode="ignore"`) or overwriting
         (`mode="replace"`) any that collide on the model's primary key.
@@ -97,10 +97,10 @@ class Repository:
         return len(cleaned)
 
     def upsert_dataframe(
-        self,
-        model: Type[Base],
-        df: pd.DataFrame,
-        mode: UpsertMode = "ignore",
+            self,
+            model: Type[Base],
+            df: pd.DataFrame,
+            mode: UpsertMode = "ignore",
     ) -> int:
         """Same as `upsert()`, but takes a DataFrame whose columns are
         expected to match the model's attribute names. Columns the model
@@ -148,10 +148,10 @@ class Repository:
     # ---- reads ----------------------------------------------------------
 
     def fetch_dataframe(
-        self,
-        model: Type[Base],
-        since: date | None = None,
-        **equality_filters: Any,
+            self,
+            model: Type[Base],
+            since: date | None = None,
+            **equality_filters: Any,
     ) -> pd.DataFrame:
         """Read rows from `model`'s table into a DataFrame, optionally
         filtered by exact-match columns (e.g. `ticker="AAPL"`) and/or a
@@ -173,6 +173,18 @@ class Repository:
         # refresh_*() calls run back-to-back inside one session_scope(),
         # as aggregations.run_all() does.
         return pd.read_sql(stmt, self._session.connection())
+
+    def rollback(self) -> None:
+        """Roll back this Repository's session without ending it.
+
+        Needed by callers that catch an exception mid-batch (e.g.
+        `ingest_tickers` skipping one bad ticker without aborting the whole
+        pipeline run) and want to keep using the same session afterward --
+        if a partial write for that ticker was already flushed before the
+        failure, the session is left needing an explicit rollback before
+        any further `upsert`/`fetch_dataframe` call on it will succeed.
+        """
+        self._session.rollback()
 
     def latest_cluster_membership(self) -> pd.DataFrame:
         """Most recent DBSCAN cluster-membership row per ticker.

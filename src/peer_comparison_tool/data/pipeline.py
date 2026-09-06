@@ -217,7 +217,27 @@ def ingest_tickers(
     for ticker in stale_tickers:
         sub_industry = ticker_subindustry_map[ticker]
         price_history_raw = _extract_single_ticker_history(price_history_batch, ticker)
-        if ingest_ticker(client, repo, ticker, sub_industry, company_names, price_history_raw=price_history_raw):
+        try:
+            ingested = ingest_ticker(client, repo, ticker, sub_industry, company_names, price_history_raw=price_history_raw)
+        except Exception:
+            # A single ticker's data hitting an unexpected shape (e.g. a
+            # delisted ticker, or a balance-sheet template this pipeline
+            # hasn't seen before -- see transforms/ticker_financials.py for
+            # one concrete case) must not abort every other ticker in this
+            # batch. ingest_ticker already catches network-layer failures
+            # (DataRetrievalError) itself; this is the backstop for bugs or
+            # data shapes further down in the transform layer. Logged with
+            # the full traceback so it's still visible and fixable, just not
+            # fatal to the run. Rolling back is defensive: today's known
+            # failure mode (a KeyError inside a pure transform function)
+            # happens before any DB write for this ticker, so there's
+            # nothing to undo yet, but a future failure that occurs after a
+            # partial write would otherwise leave this session needing a
+            # rollback before any later ticker's writes could succeed.
+            logger.exception("Skipping %s: unexpected error during ingestion", ticker)
+            repo.rollback()
+            continue
+        if ingested:
             fetched.append(ticker)
 
     if fetched:
