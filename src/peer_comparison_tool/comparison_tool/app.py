@@ -40,6 +40,7 @@ from dash.dependencies import Input, Output
 from src.peer_comparison_tool.data.database import session_scope
 from src.peer_comparison_tool.data.repository import Repository
 
+from .bad_news_screener_page import get_bad_news_screener_page_layout, register_bad_news_screener_callback
 from .biggest_winners_and_losers import (
     get_biggest_winners_and_losers_page_layout,
     register_winners_and_losers_callback,
@@ -105,6 +106,8 @@ def create_app() -> dash.Dash:
         #     return get_chat_page_layout()
         elif pathname == '/company-discounted-cashflow-calculation':
             return get_discounted_cashflow_model_page_layout(data.cashflow_map)
+        elif pathname == "/bad-news-screener":
+            return get_bad_news_screener_page_layout()
         else:
             return get_landing_page_layout_v2(economic_data=data.economic_data)
 
@@ -156,6 +159,7 @@ def create_app() -> dash.Dash:
     )
     register_winners_and_losers_callback(app, data.ticker_series_data)
     register_discounted_cashflow_model_page_callbacks(app, data.cashflow_map, data.latest_enterprise_value)
+    register_bad_news_screener_callback(app, data.ticker_series_data, data.snapshot_recent_metrics)
     # register_agent_chat_callback(app)  # see module docstring
 
     @app.callback(

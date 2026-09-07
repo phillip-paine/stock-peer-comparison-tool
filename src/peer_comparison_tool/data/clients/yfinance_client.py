@@ -88,6 +88,19 @@ class YFinanceClient:
         stock = yf.Ticker(ticker)
         return self._retry(lambda: stock.cashflow, f"{ticker} cashflow")
 
+    def fetch_news(self, ticker: str) -> list[dict]:
+        """Raw recent news items for a ticker (title, publisher, link, etc.).
+
+        Added for the bad-news screener (`comparison_tool/news_sentiment.py`),
+        replacing the direct `yf.Ticker(ticker).get_news()` call that used to
+        live inline in `bad_news_trading_model.py` — same underlying call,
+        just going through the retry/backoff wrapper every other fetch here
+        already gets, since a transient failure here shouldn't need to be
+        handled differently from any other yfinance call.
+        """
+        stock = yf.Ticker(ticker)
+        return self._retry(lambda: stock.get_news(), f"{ticker} news")
+
     def fetch_price_history(self, ticker: str, period: str = "2y") -> pd.DataFrame:
         """Raw OHLCV daily price history for one ticker."""
         stock = yf.Ticker(ticker)

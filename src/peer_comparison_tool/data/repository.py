@@ -103,17 +103,41 @@ class Repository:
             mode: UpsertMode = "ignore",
     ) -> int:
         """Same as `upsert()`, but takes a DataFrame whose columns are
-        expected to match the model's attribute names. Columns the model
-        doesn't recognize are dropped rather than raising, so upstream
-        transform code can pass a slightly wider frame without needing to
-        hand-curate a column list at every call site (the original
-        `data/main.py` did this manually, e.g. `recent_metrics_table_keys`).
+        expected to match the model's *attribute* names (e.g. `asset_class`),
+        which is how every transform function in this codebase names its
+        output columns -- not necessarily the underlying DB column name,
+        which can differ for a column declared with a custom
+        `mapped_column("SomeName")`. In this schema that's just
+        `AssetClassTimeSeries.asset_class`, mapped to the DB column
+        `"AssetClass"`.
+
+        This distinction matters more than it looks: SQLAlchemy Core's
+        `insert().values()` (used inside `upsert()`) requires dict keys to
+        match the DB column name, not the ORM attribute name -- verified
+        directly, passing `{"asset_class": ...}` raises `CompileError:
+        Unconsumed column names: asset_class` rather than translating it.
+        The previous version of this method filtered DataFrame columns
+        against `model.__table__.columns` (DB names), so `asset_class`
+        never matched anything and was silently dropped before the record
+        dicts were even built -- no exception, no warning. Every row this
+        pipeline has ever written to `asset_class_time_series` has had a
+        NULL `AssetClass` column as a result. Existing rows need a one-time
+        backfill (a straight `UPDATE ... SET "AssetClass" = ...` per asset
+        class, not a re-fetch from yfinance); this fix only prevents the
+        same thing happening to future writes.
+
+        Columns the model doesn't recognize are dropped rather than
+        raising, so upstream transform code can pass a slightly wider frame
+        without needing to hand-curate a column list at every call site
+        (the original `data/main.py` did this manually, e.g.
+        `recent_metrics_table_keys`).
         """
         if df.empty:
             return 0
-        model_cols = {c.name for c in model.__table__.columns}
-        df = df[[c for c in df.columns if c in model_cols]]
-        return self.upsert(model, df.to_dict("records"), mode=mode)
+        attr_to_db_name = {prop.key: prop.columns[0].name for prop in inspect(model).column_attrs}
+        df = df[[c for c in df.columns if c in attr_to_db_name]]
+        records = [{attr_to_db_name[k]: v for k, v in record.items()} for record in df.to_dict("records")]
+        return self.upsert(model, records, mode=mode)
 
     def record_fetch(self, tickers: Iterable[str], as_of: date | None = None) -> None:
         """Stamp today's date (or `as_of`) as the last-fetched date for each
@@ -173,18 +197,6 @@ class Repository:
         # refresh_*() calls run back-to-back inside one session_scope(),
         # as aggregations.run_all() does.
         return pd.read_sql(stmt, self._session.connection())
-
-    def rollback(self) -> None:
-        """Roll back this Repository's session without ending it.
-
-        Needed by callers that catch an exception mid-batch (e.g.
-        `ingest_tickers` skipping one bad ticker without aborting the whole
-        pipeline run) and want to keep using the same session afterward --
-        if a partial write for that ticker was already flushed before the
-        failure, the session is left needing an explicit rollback before
-        any further `upsert`/`fetch_dataframe` call on it will succeed.
-        """
-        self._session.rollback()
 
     def latest_cluster_membership(self) -> pd.DataFrame:
         """Most recent DBSCAN cluster-membership row per ticker.

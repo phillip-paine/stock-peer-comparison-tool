@@ -198,6 +198,7 @@ def register_discounted_cashflow_model_page_callbacks(
             forecast_frames.append(frame)
 
         df_ts_plot = pd.concat(forecast_frames)
+        df_ts_plot['date'] = pd.to_datetime(df_ts_plot['date'])
         df_ts_plot['year'] = df_ts_plot['date'].dt.year.astype(str)
         value_cols = [c for c in ['Free Cash Flow', 'Discounted Forecast Free Cash Flow',
                                    'Bear Discounted Forecast FCF', 'Bull Discounted Forecast FCF']
