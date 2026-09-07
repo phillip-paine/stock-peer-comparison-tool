@@ -47,6 +47,7 @@ def get_landing_page_layout_v2(economic_data: pd.DataFrame):
                         dbc.NavLink("Compass Chat", href="/compass-chat", active="exact"),
                         dbc.NavLink("Discounted Cashflow Model", href="/company-discounted-cashflow-calculation", active="exact"),
                         dbc.NavLink("Bad News Screener", href="/bad-news-screener", active="exact"),
+                        dbc.NavLink("Valuation Dispersion Screener", href="/valuation-dispersion-screener", active="exact"),
                     ],
                     vertical=True,
                     pills=True,

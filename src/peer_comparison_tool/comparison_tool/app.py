@@ -65,6 +65,10 @@ from .individual_company_overview_page import (
 )
 from .landing_page import get_landing_page_layout_v2, register_landing_page_data_callbacks
 from .styles import colors
+from .valuation_dispersion_page import (
+    get_valuation_dispersion_page_layout,
+    register_valuation_dispersion_callback,
+)
 
 # discounted_cashflow_model_page and agent_chat are intentionally not wired
 # up yet -- see module docstring above and the (pre-existing, commented-out)
@@ -108,6 +112,8 @@ def create_app() -> dash.Dash:
             return get_discounted_cashflow_model_page_layout(data.cashflow_map)
         elif pathname == "/bad-news-screener":
             return get_bad_news_screener_page_layout()
+        elif pathname == "/valuation-dispersion-screener":
+            return get_valuation_dispersion_page_layout()
         else:
             return get_landing_page_layout_v2(economic_data=data.economic_data)
 
@@ -160,6 +166,7 @@ def create_app() -> dash.Dash:
     register_winners_and_losers_callback(app, data.ticker_series_data)
     register_discounted_cashflow_model_page_callbacks(app, data.cashflow_map, data.latest_enterprise_value)
     register_bad_news_screener_callback(app, data.ticker_series_data, data.snapshot_recent_metrics)
+    register_valuation_dispersion_callback(app, data.snapshot_recent_metrics)
     # register_agent_chat_callback(app)  # see module docstring
 
     @app.callback(
