@@ -206,6 +206,39 @@ def classify_dispersion(
     return result
 
 
+def score_valuation_dispersion(
+    snapshot_recent_metrics: pd.DataFrame,
+    group_col: str = "sub_industry",
+    valuation_metrics: list[str] = DEFAULT_VALUATION_METRICS,
+    higher_better_quality_metrics: list[str] = DEFAULT_QUALITY_METRICS_HIGHER_BETTER,
+    lower_better_quality_metrics: list[str] = DEFAULT_QUALITY_METRICS_LOWER_BETTER,
+    min_group_size: int = 4,
+    cheap_threshold: float = -1.0,
+    expensive_threshold: float = 1.0,
+    quality_threshold: float = 0.0,
+) -> pd.DataFrame:
+    """Full compute-and-classify pipeline (z-score valuation, z-score
+    quality, classify), returning *every* ticker -- including `NO_SIGNAL`
+    ones -- as a DataFrame.
+
+    `screen_valuation_dispersion` (below) is this same pipeline filtered
+    down to just the flagged tickers, as a list of dicts, for a plain
+    summary table. This unfiltered version exists for a quadrant-map
+    visualisation, where the `NO_SIGNAL` tickers sitting in the gap
+    between the cheap/expensive thresholds are exactly the point --
+    dropping them would hide the gap the chart is meant to show.
+    """
+    if snapshot_recent_metrics.empty or group_col not in snapshot_recent_metrics.columns:
+        return pd.DataFrame()
+
+    scored = compute_valuation_zscores(snapshot_recent_metrics, group_col, valuation_metrics, min_group_size)
+    scored = compute_quality_zscores(
+        scored, group_col, higher_better_quality_metrics, lower_better_quality_metrics, min_group_size
+    )
+    scored = classify_dispersion(scored, cheap_threshold, expensive_threshold, quality_threshold)
+    return scored
+
+
 def screen_valuation_dispersion(
     snapshot_recent_metrics: pd.DataFrame,
     group_col: str = "sub_industry",
@@ -223,14 +256,12 @@ def screen_valuation_dispersion(
     descending -- the most statistically extreme names first, regardless
     of which of the four signal buckets they landed in.
     """
-    if snapshot_recent_metrics.empty or group_col not in snapshot_recent_metrics.columns:
-        return []
-
-    scored = compute_valuation_zscores(snapshot_recent_metrics, group_col, valuation_metrics, min_group_size)
-    scored = compute_quality_zscores(
-        scored, group_col, higher_better_quality_metrics, lower_better_quality_metrics, min_group_size
+    scored = score_valuation_dispersion(
+        snapshot_recent_metrics, group_col, valuation_metrics, higher_better_quality_metrics,
+        lower_better_quality_metrics, min_group_size, cheap_threshold, expensive_threshold, quality_threshold,
     )
-    scored = classify_dispersion(scored, cheap_threshold, expensive_threshold, quality_threshold)
+    if scored.empty:
+        return []
 
     flagged = scored[scored["signal"] != NO_SIGNAL].copy()
     flagged["_sort_key"] = flagged["valuation_zscore"].abs()

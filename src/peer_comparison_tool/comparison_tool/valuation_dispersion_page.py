@@ -9,13 +9,12 @@ in memory, so it can just re-run on every click.
 
 Two-step UI, same shape as the other screener pages:
 
-1. Screen: `data.transforms.valuation_dispersion.screen_valuation_dispersion`
+1. Screen: `data.transforms.valuation_dispersion.score_valuation_dispersion`
    z-scores each ticker's valuation multiples against its peer group
    (GICS sub-industry by default, or DBSCAN cluster label), crosses that
-   against a quality z-score (ROE, margin, leverage), and returns tickers
-   whose valuation is a statistical outlier -- split into four signals
-   (cheap/expensive x quality-backed/not) rather than one ranked "cheapest"
-   list. See that module's docstring for the full rationale.
+   against a quality z-score (ROE, margin, leverage), and classifies every
+   ticker -- flagged ones drive the summary table, and the full set
+   (flagged and not) drives the quadrant map below it.
 2. Inspect: clicking a row shows the ticker's own metric values against
    its peer group's median, so the "why" behind the z-score is visible,
    not just the number.
@@ -25,13 +24,19 @@ from __future__ import annotations
 import dash
 import dash_bootstrap_components as dbc
 import pandas as pd
+import plotly.express as px
 from dash import dash_table, dcc, html
 from dash.dependencies import Input, Output, State
 
 from src.peer_comparison_tool.data.transforms.valuation_dispersion import (
+    CHEAP_QUALITY_INTACT,
+    CHEAP_QUALITY_WEAK,
     DEFAULT_VALUATION_METRICS,
+    EXPENSIVE_QUALITY_STRONG,
+    EXPENSIVE_QUALITY_WEAK,
+    NO_SIGNAL,
     SIGNAL_DESCRIPTIONS,
-    screen_valuation_dispersion,
+    score_valuation_dispersion,
 )
 
 from .styles import colors
@@ -51,7 +56,18 @@ SIGNAL_LABELS = {
     "cheap_quality_weak": "Cheap, quality weak (possible value trap)",
     "expensive_quality_strong": "Expensive, quality strong",
     "expensive_quality_weak": "Expensive, quality weak (possible overvaluation)",
+    NO_SIGNAL: "No signal (inside thresholds)",
 }
+SIGNAL_COLORS = {
+    CHEAP_QUALITY_INTACT: "#55efc4",       # green -- the "buy idea" quadrant
+    CHEAP_QUALITY_WEAK: "#fdcb6e",         # amber -- possible value trap
+    EXPENSIVE_QUALITY_STRONG: "#74b9ff",   # blue -- priced for quality
+    EXPENSIVE_QUALITY_WEAK: "#d63031",     # red -- possible overvaluation
+    NO_SIGNAL: "#636e72",                  # muted gray -- the middle gap
+}
+# Fixed legend/plot order so the four quadrants + gap always appear in the
+# same order regardless of which signals happen to be present in the data.
+SIGNAL_ORDER = [CHEAP_QUALITY_INTACT, EXPENSIVE_QUALITY_STRONG, CHEAP_QUALITY_WEAK, EXPENSIVE_QUALITY_WEAK, NO_SIGNAL]
 GROUP_COLUMN_OPTIONS = [
     {"label": "GICS Sub-industry", "value": "sub_industry"},
     {"label": "Valuation Cluster (DBSCAN)", "value": "label"},
@@ -125,6 +141,20 @@ def get_valuation_dispersion_page_layout() -> html.Div:
         dbc.Row(
             dbc.Col(
                 dbc.Card([
+                    dbc.CardHeader("Quadrant Map (valuation vs. quality, both vs. peer group)",
+                                   style={"color": colors["text"], "backgroundColor": colors["background"]}),
+                    dbc.CardBody(
+                        dcc.Graph(id="valdisp-quadrant-chart", style={"height": "65vh"}),
+                        style={"backgroundColor": colors["background"]},
+                    ),
+                ], style={"backgroundColor": colors["background"], "marginBottom": "20px"}),
+                width=12,
+            )
+        ),
+
+        dbc.Row(
+            dbc.Col(
+                dbc.Card([
                     dbc.CardHeader("Candidates (click a row for detail)",
                                    style={"color": colors["text"], "backgroundColor": colors["background"]}),
                     dbc.CardBody(
@@ -156,7 +186,11 @@ def register_valuation_dispersion_callback(app: dash.Dash, snapshot_recent_metri
     last_results_by_ticker: dict[str, dict] = {}
 
     @app.callback(
-        [Output("valdisp-summary-table", "data"), Output("valdisp-screen-status", "children")],
+        [
+            Output("valdisp-summary-table", "data"),
+            Output("valdisp-screen-status", "children"),
+            Output("valdisp-quadrant-chart", "figure"),
+        ],
         [Input("valdisp-screen-button", "n_clicks")],
         [
             State("valdisp-group-col", "value"),
@@ -166,31 +200,47 @@ def register_valuation_dispersion_callback(app: dash.Dash, snapshot_recent_metri
         ],
     )
     def run_screen(n_clicks, group_col, min_group_size, cheap_threshold, expensive_threshold):
+        empty_fig = _empty_quadrant_figure()
         if not n_clicks:
-            return [], "Click \"Run Screen\" to screen all tracked tickers against their peers."
+            return [], "Click \"Run Screen\" to screen all tracked tickers against their peers.", empty_fig
 
         group_col = group_col or DEFAULT_GROUP_COL
         if group_col not in snapshot_recent_metrics.columns:
-            return [], f"'{group_col}' isn't available in the loaded data yet."
+            return [], f"'{group_col}' isn't available in the loaded data yet.", empty_fig
 
-        results = screen_valuation_dispersion(
-            snapshot_recent_metrics,
-            group_col=group_col,
-            min_group_size=min_group_size or DEFAULT_MIN_GROUP_SIZE,
-            cheap_threshold=cheap_threshold if cheap_threshold is not None else DEFAULT_CHEAP_THRESHOLD,
-            expensive_threshold=expensive_threshold if expensive_threshold is not None else DEFAULT_EXPENSIVE_THRESHOLD,
+        min_group_size = min_group_size or DEFAULT_MIN_GROUP_SIZE
+        cheap_threshold = cheap_threshold if cheap_threshold is not None else DEFAULT_CHEAP_THRESHOLD
+        expensive_threshold = expensive_threshold if expensive_threshold is not None else DEFAULT_EXPENSIVE_THRESHOLD
+
+        scored = score_valuation_dispersion(
+            snapshot_recent_metrics, group_col=group_col, min_group_size=min_group_size,
+            cheap_threshold=cheap_threshold, expensive_threshold=expensive_threshold,
         )
+        if scored.empty:
+            return [], "No data available to screen.", empty_fig
+
+        # Points with no valuation z-score at all (peer group too thin for
+        # every metric) can't be placed on the map -- drop just those from
+        # the chart rather than plotting them at a meaningless position.
+        plottable = scored.dropna(subset=["valuation_zscore"])
+        fig = _build_quadrant_figure(plottable, group_col, cheap_threshold, expensive_threshold)
+
+        results = scored[scored["signal"] != NO_SIGNAL].copy()
+        results["_sort_key"] = results["valuation_zscore"].abs()
+        results = results.sort_values("_sort_key", ascending=False).drop(columns="_sort_key")
+        results_records = results.to_dict("records")
 
         last_results_by_ticker.clear()
-        last_results_by_ticker.update({r["ticker"]: {**r, "group_col": group_col} for r in results})
+        last_results_by_ticker.update({r["ticker"]: {**r, "group_col": group_col} for r in results_records})
 
-        if not results:
-            return [], "No statistically significant valuation outliers found with the current settings."
+        if not results_records:
+            status = "No statistically significant valuation outliers found with the current settings."
+        else:
+            n_groups = snapshot_recent_metrics[group_col].nunique()
+            status = f"Screened {len(snapshot_recent_metrics)} tickers across {n_groups} peer groups: {len(results_records)} flagged."
 
-        rows = [_format_summary_row(r, group_col) for r in results]
-        n_groups = snapshot_recent_metrics[group_col].nunique()
-        status = f"Screened {len(snapshot_recent_metrics)} tickers across {n_groups} peer groups: {len(results)} flagged."
-        return rows, status
+        rows = [_format_summary_row(r, group_col) for r in results_records]
+        return rows, status, fig
 
     @app.callback(
         Output("valdisp-detail-content", "children"),
@@ -207,6 +257,75 @@ def register_valuation_dispersion_callback(app: dash.Dash, snapshot_recent_metri
             return html.Div("Detail unavailable -- re-run the screen.", style={"color": colors["text"]})
 
         return _build_detail_layout(result)
+
+
+def _empty_quadrant_figure() -> "px.scatter":
+    fig = px.scatter(title="Run the screen to plot tickers")
+    fig.update_layout(plot_bgcolor=colors["background"], paper_bgcolor=colors["background"],
+                       font_color=colors["text"], margin=dict(l=20, r=20, t=30, b=20))
+    return fig
+
+
+def _build_quadrant_figure(scored: pd.DataFrame, group_col: str, cheap_threshold: float, expensive_threshold: float):
+    """Valuation (x) vs. quality (y) scatter, one dot per ticker, colored by
+    signal -- the four flagged quadrants plus a muted gray for `NO_SIGNAL`
+    tickers sitting in the gap between the cheap/expensive thresholds.
+
+    Unlike a standard quadrant map split down the middle, there's a real
+    vertical band here (shaded, between `cheap_threshold` and
+    `expensive_threshold`) where a ticker doesn't get classified either
+    way regardless of its quality score -- that band, and the `NO_SIGNAL`
+    dots inside it, are the point: most tickers' valuation isn't a
+    statistical outlier, and this map should make that visible rather than
+    forcing every ticker into one of four boxes.
+
+    Hover detail mirrors the scatter chart on the main comparison page
+    (`comparison_page.py`'s `fig3`) -- same metrics, same dark theme.
+    """
+    present_signals = [s for s in SIGNAL_ORDER if s in scored["signal"].unique()]
+
+    fig = px.scatter(
+        scored, x="valuation_zscore", y="quality_zscore", color="signal", text="ticker",
+        color_discrete_map=SIGNAL_COLORS, category_orders={"signal": present_signals},
+        hover_name="ticker",
+        hover_data={
+            "signal": False, "valuation_zscore": ":.2f", "quality_zscore": ":.2f",
+            "name": True, group_col: True, "market_cap_MM": ":.0f",
+            "price_eps_ratio": ":.1f", "enterpriseToEbitda": ":.1f", "price_to_book": ":.1f",
+            "return_on_equity": ":.1%", "profit_margin": ":.1%", "debt_to_equity_ratio": ":.2f",
+            "valuation_peer_group_size": True,
+        },
+        labels={
+            "valuation_zscore": "Valuation z-score vs. peers (← cheap · expensive →)",
+            "quality_zscore": "Quality z-score vs. peers (ROE, margin, leverage) →",
+            "signal": "Signal",
+        },
+        title="Valuation vs. Quality, both scored against each ticker's own peer group",
+    )
+    fig.update_traces(textposition="top center", marker=dict(size=9, line=dict(width=1, color="DarkSlateGrey")))
+
+    # The "gap" band: no ticker inside it gets a signal regardless of quality.
+    fig.add_vrect(x0=cheap_threshold, x1=expensive_threshold, fillcolor=SIGNAL_COLORS[NO_SIGNAL],
+                  opacity=0.12, line_width=0, layer="below")
+    fig.add_vline(x=cheap_threshold, line_dash="dash", line_color=colors["text"], opacity=0.4)
+    fig.add_vline(x=expensive_threshold, line_dash="dash", line_color=colors["text"], opacity=0.4)
+    fig.add_hline(y=0, line_dash="dash", line_color=colors["text"], opacity=0.4)
+
+    quadrant_labels = [
+        ("Cheap, quality intact", 0.02, 0.98, "left", "top"),
+        ("Expensive, quality strong", 0.98, 0.98, "right", "top"),
+        ("Cheap, quality weak", 0.02, 0.02, "left", "bottom"),
+        ("Expensive, quality weak", 0.98, 0.02, "right", "bottom"),
+    ]
+    for text, x, y, xanchor, yanchor in quadrant_labels:
+        fig.add_annotation(text=text, xref="paper", yref="paper", x=x, y=y, xanchor=xanchor, yanchor=yanchor,
+                            showarrow=False, font=dict(size=11, color=colors["text"]), opacity=0.6)
+
+    fig.update_layout(
+        plot_bgcolor=colors["background"], paper_bgcolor=colors["background"], font_color=colors["text"],
+        margin=dict(l=20, r=20, t=40, b=20), legend_title_text="Signal",
+    )
+    return fig
 
 
 def _format_summary_row(result: dict, group_col: str) -> dict:

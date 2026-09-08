@@ -64,6 +64,7 @@ from .individual_company_overview_page import (
     register_individual_company_overview_callback,
 )
 from .landing_page import get_landing_page_layout_v2, register_landing_page_data_callbacks
+from .report_comparison_page import get_report_comparison_page_layout, register_report_comparison_callback
 from .styles import colors
 from .valuation_dispersion_page import (
     get_valuation_dispersion_page_layout,
@@ -114,6 +115,8 @@ def create_app() -> dash.Dash:
             return get_bad_news_screener_page_layout()
         elif pathname == "/valuation-dispersion-screener":
             return get_valuation_dispersion_page_layout()
+        elif pathname == "/report-comparison":
+            return get_report_comparison_page_layout(data.company_info)
         else:
             return get_landing_page_layout_v2(economic_data=data.economic_data)
 
@@ -167,6 +170,7 @@ def create_app() -> dash.Dash:
     register_discounted_cashflow_model_page_callbacks(app, data.cashflow_map, data.latest_enterprise_value)
     register_bad_news_screener_callback(app, data.ticker_series_data, data.snapshot_recent_metrics)
     register_valuation_dispersion_callback(app, data.snapshot_recent_metrics)
+    register_report_comparison_callback(app, data.qfin_data, data.bs_data, data.cashflow_map)
     # register_agent_chat_callback(app)  # see module docstring
 
     @app.callback(
