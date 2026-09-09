@@ -31,6 +31,7 @@ from dash.dependencies import Input, Output, State
 
 from src.peer_comparison_tool.data.transforms.report_comparison import (
     ANNUAL_METRIC_LABELS,
+    INVERTED_COLOR_METRICS,
     LARGE_NUMBER_METRICS,
     PERCENT_METRICS,
     QUARTERLY_METRIC_LABELS,
@@ -60,6 +61,8 @@ TABLE_COLUMN_LABELS = {
     "latest_value": "Latest",
     "change_pct": "Change",
 }
+CHANGE_COLOR_GOOD = "#55efc4"  # green -- matches the "cheap_quality_intact" color on the dispersion page
+CHANGE_COLOR_BAD = "#d63031"   # red -- matches "expensive_quality_weak"
 
 
 def _sec_edgar_url(ticker: str, form_type: str) -> str:
@@ -72,9 +75,23 @@ def _sec_edgar_url(ticker: str, form_type: str) -> str:
     )
 
 
-def get_report_comparison_page_layout(company_info: pd.DataFrame) -> html.Div:
+def _ticker_dropdown_options(company_info: pd.DataFrame) -> list[dict[str, str]]:
+    """`{"label": "AAPL — Apple Inc.", "value": "AAPL"}` per ticker, sorted
+    by ticker -- added so the dropdown is browsable by name, not just by
+    memorized ticker. Falls back to the bare ticker if `name` is missing."""
     tickers = sorted(company_info["ticker"].unique())
-    default_ticker = tickers[0] if tickers else None
+    ticker_name = company_info.drop_duplicates("ticker").set_index("ticker")["name"].to_dict()
+    options = []
+    for t in tickers:
+        name = ticker_name.get(t)
+        label = f"{t} — {name}" if pd.notna(name) and name else t
+        options.append({"label": label, "value": t})
+    return options
+
+
+def get_report_comparison_page_layout(company_info: pd.DataFrame) -> html.Div:
+    ticker_options = _ticker_dropdown_options(company_info)
+    default_ticker = ticker_options[0]["value"] if ticker_options else None
 
     return dbc.Container([
         dbc.Row([
@@ -87,7 +104,7 @@ def get_report_comparison_page_layout(company_info: pd.DataFrame) -> html.Div:
         dbc.Row([
             dbc.Col([
                 html.Label("Ticker:", style={"color": colors["text"]}),
-                dcc.Dropdown(id="reportcmp-ticker", options=[{"label": t, "value": t} for t in tickers],
+                dcc.Dropdown(id="reportcmp-ticker", options=ticker_options,
                              value=default_ticker, clearable=False, style={"marginBottom": "15px"}),
             ], width=3),
             dbc.Col([
@@ -119,6 +136,12 @@ def get_report_comparison_page_layout(company_info: pd.DataFrame) -> html.Div:
                             style_header={"backgroundColor": colors["background"], "color": colors["text"], "fontWeight": "bold"},
                             style_data={"backgroundColor": colors["background"], "color": colors["text"]},
                             style_cell={"minWidth": "100px", "textAlign": "left"},
+                            style_data_conditional=[
+                                {"if": {"filter_query": '{_change_color} = "green"', "column_id": "change_pct"},
+                                 "color": CHANGE_COLOR_GOOD},
+                                {"if": {"filter_query": '{_change_color} = "red"', "column_id": "change_pct"},
+                                 "color": CHANGE_COLOR_BAD},
+                            ],
                         ),
                         style={"backgroundColor": colors["background"]},
                     ),
@@ -190,7 +213,19 @@ def _format_table_row(row: dict, labels: dict[str, str]) -> dict:
         "latest_period": row["latest_period"] or "n/a",
         "latest_value": _format_value(row["latest_value"], is_percent, is_large_number),
         "change_pct": "n/a" if row["change_pct"] is None else f"{row['change_pct'] * 100:+.1f}%",
+        "_change_color": _change_color(row["change_pct"], metric),
     }
+
+
+def _change_color(change_pct: float | None, metric: str) -> str:
+    """"green"/"red"/"" for the `change_pct` cell's conditional styling --
+    a decrease reads as good (green) instead of bad (red) for metrics in
+    `INVERTED_COLOR_METRICS` (see that set's docstring for which metrics
+    and why only those)."""
+    if change_pct is None or change_pct == 0:
+        return ""
+    favourable = -change_pct if metric in INVERTED_COLOR_METRICS else change_pct
+    return "green" if favourable > 0 else "red"
 
 
 def _format_value(value, is_percent: bool, is_large_number: bool) -> str:

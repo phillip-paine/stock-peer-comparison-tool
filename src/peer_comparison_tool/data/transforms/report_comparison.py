@@ -79,6 +79,15 @@ LARGE_NUMBER_METRICS = {
     "ordinary_shares_number", "Free Cash Flow", "operating_cash_flow", "capital_expenditure",
 }
 
+# Metrics where a *decrease* is the favourable direction -- lower leverage is
+# healthier, so a negative change here should read as good news (green), not
+# bad (red), the opposite of every other metric in the two label maps above.
+# Deliberately narrow: e.g. "Total Liabilities" or "capital_expenditure"
+# falling isn't unambiguously good (could mean a shrinking business or less
+# growth investment rather than improved health), so they're left with the
+# default positive-is-green coloring rather than guessed at.
+INVERTED_COLOR_METRICS = {"Debt-to-Equity Ratio"}
+
 
 def build_annual_frame(bs_data: pd.DataFrame, cashflow_map: dict[str, pd.DataFrame], ticker: str) -> pd.DataFrame:
     """One row per annual period for `ticker`, combining `bs_data` (has the
