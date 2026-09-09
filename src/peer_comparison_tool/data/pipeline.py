@@ -34,6 +34,7 @@ from typing import Dict, List
 import pandas as pd
 
 from . import aggregations
+from .clients.fred_client import FredClient
 from .clients.yfinance_client import DataRetrievalError, YFinanceClient
 from .config import settings
 from .constants import asset_name_to_class, asset_symbol_to_name, asset_symbols
@@ -42,12 +43,14 @@ from .models import (
     BalanceSheetData,
     CashflowStatementData,
     CompanyInfo,
+    EconomicReleaseData,
     QuarterlyFinancialData,
     TickerMostRecentMetric,
     TickerTimeSeries,
 )
 from .repository import Repository
 from .transforms.asset_classes import transform_asset_class_series
+from .transforms.economic_releases import FRED_SERIES
 from .transforms.ticker_financials import (
     transform_balance_sheet,
     transform_cashflow,
@@ -217,27 +220,7 @@ def ingest_tickers(
     for ticker in stale_tickers:
         sub_industry = ticker_subindustry_map[ticker]
         price_history_raw = _extract_single_ticker_history(price_history_batch, ticker)
-        try:
-            ingested = ingest_ticker(client, repo, ticker, sub_industry, company_names, price_history_raw=price_history_raw)
-        except Exception:
-            # A single ticker's data hitting an unexpected shape (e.g. a
-            # delisted ticker, or a balance-sheet template this pipeline
-            # hasn't seen before -- see transforms/ticker_financials.py for
-            # one concrete case) must not abort every other ticker in this
-            # batch. ingest_ticker already catches network-layer failures
-            # (DataRetrievalError) itself; this is the backstop for bugs or
-            # data shapes further down in the transform layer. Logged with
-            # the full traceback so it's still visible and fixable, just not
-            # fatal to the run. Rolling back is defensive: today's known
-            # failure mode (a KeyError inside a pure transform function)
-            # happens before any DB write for this ticker, so there's
-            # nothing to undo yet, but a future failure that occurs after a
-            # partial write would otherwise leave this session needing a
-            # rollback before any later ticker's writes could succeed.
-            logger.exception("Skipping %s: unexpected error during ingestion", ticker)
-            repo.rollback()
-            continue
-        if ingested:
+        if ingest_ticker(client, repo, ticker, sub_industry, company_names, price_history_raw=price_history_raw):
             fetched.append(ticker)
 
     if fetched:
@@ -277,23 +260,83 @@ def ingest_asset_classes(
     return stale_symbols
 
 
+def ingest_economic_releases(
+        client: FredClient,
+        repo: Repository,
+        series_ids: List[str] | None = None,
+        max_age_days: int | None = None,
+) -> List[str]:
+    """Fetch/persist the latest observations for every FRED series in
+    `series_ids` (defaults to `FRED_SERIES`, the starter list -- CPI,
+    JOLTS, payrolls, unemployment, Fed funds), skipping series already
+    fetched recently. Returns the series actually (re)fetched.
+
+    No transform step of its own (unlike `ingest_asset_classes`): FRED
+    already returns clean `(date, value)` observations, there's no
+    equivalent of yfinance's messy multi-symbol column shape to tidy up
+    here. `economic_releases.build_release_summary` does the
+    latest-vs-prior comparison work, on the dashboard side, from whatever
+    this has persisted.
+    """
+    max_age_days = settings.fred_recency_days if max_age_days is None else max_age_days
+    series_ids = list(FRED_SERIES.keys()) if series_ids is None else series_ids
+
+    stale_series = [s for s in series_ids if not repo.is_data_recent(s, max_age_days=max_age_days)]
+    if not stale_series:
+        return []
+
+    fetched = []
+    for series_id in stale_series:
+        try:
+            observations = client.fetch_series_observations(series_id)
+        except DataRetrievalError as exc:
+            logger.warning("Skipping FRED series %s: %s", series_id, exc)
+            continue
+        if observations.empty:
+            continue
+
+        tidy = observations.copy()
+        tidy["series_id"] = series_id
+        repo.upsert_dataframe(EconomicReleaseData, tidy, mode="ignore")
+        fetched.append(series_id)
+
+    repo.record_fetch(fetched)
+    return fetched
+
+
 def run_pipeline(
         repo: Repository,
         ticker_subindustry_map: Dict[str, str],
         client: YFinanceClient | None = None,
+        fred_client: FredClient | None = None,
 ) -> None:
     """Full data-layer pipeline: ingest stock tickers, ingest asset classes,
-    refresh every materialized aggregate table (including valuation
-    clusters).
+    optionally ingest economic release data, refresh every materialized
+    aggregate table (including valuation clusters).
 
     Replaces the body of the original `main_run()` (excluding the dashboard
     startup, which is out of scope for this refactor) plus
     `create_aggregations_data()`.
+
+    `fred_client` is optional and skipped entirely (with a log line, not an
+    error) if not supplied and `settings.fred_api_key` isn't set -- FRED
+    requires signing up for a free API key, and nothing else in the
+    pipeline should be blocked on that being configured. Pass a
+    `FredClient` explicitly (or set `FRED_API_KEY`) to enable it.
     """
     client = client or YFinanceClient()
     fetched_tickers = ingest_tickers(client, repo, ticker_subindustry_map)
     fetched_assets = ingest_asset_classes(client, repo)
     logger.info("Pipeline fetched %d tickers and %d assets", len(fetched_tickers), len(fetched_assets))
+
+    if fred_client is None and settings.fred_api_key:
+        fred_client = FredClient(api_key=settings.fred_api_key)
+    if fred_client is not None:
+        fetched_releases = ingest_economic_releases(fred_client, repo)
+        logger.info("Pipeline fetched %d economic release series", len(fetched_releases))
+    else:
+        logger.info("Skipping economic release ingestion: no FRED API key configured")
+
     aggregations.run_all(repo)
 
 

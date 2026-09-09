@@ -72,6 +72,19 @@ class AssetClassTimeSeries(Base):
     close_price_yoy: Mapped[float | None]
 
 
+class EconomicReleaseData(Base):
+    """One value per (FRED series, release date) -- CPI, JOLTS job openings,
+    nonfarm payrolls, unemployment rate, Fed funds rate, etc. See
+    `data/clients/fred_client.py` and `data/transforms/economic_releases.py`.
+    """
+
+    __tablename__ = "economic_release_data"
+
+    series_id: Mapped[str] = mapped_column(primary_key=True)
+    date: Mapped[date] = mapped_column(primary_key=True)
+    value: Mapped[float | None]
+
+
 class QuarterlyFinancialData(Base):
     """Per-ticker quarterly income-statement-derived metrics."""
 

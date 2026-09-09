@@ -80,6 +80,16 @@ class DataConfig:
         default_factory=lambda: _env_float("PCT_ASSET_FETCH_CHUNK_DELAY_SECONDS", 2.0)
     )
 
+    # FRED (economic release data -- CPI, JOLTS, payrolls, etc.) is optional:
+    # no key set means the pipeline just skips that ingestion step rather
+    # than failing (see pipeline.run_pipeline). Sign up for a free key at
+    # https://fred.stlouisfed.org/docs/api/api_key.html.
+    fred_api_key: str | None = field(default_factory=lambda: os.getenv("FRED_API_KEY"))
+
+    # Economic releases are monthly at the fastest -- no need to hit the
+    # API more than once a day even for "today's" data.
+    fred_recency_days: int = 1
+
     @property
     def sp500_ticker_csv(self) -> Path:
         return self.data_dir / "sp500_security_ticker.csv"

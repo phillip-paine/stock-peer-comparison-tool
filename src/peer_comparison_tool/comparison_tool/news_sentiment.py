@@ -47,9 +47,8 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Protocol
 
-from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
-
 from src.peer_comparison_tool.comparison_tool.constants import HUGGINGFACE_API_TOKEN, HUGGINGFACE_MODEL
+from src.peer_comparison_tool.data.transforms.news_headlines import extract_headline_title
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +82,8 @@ def get_chat_model() -> ChatModel:
     this lazily, on first use, so the rest of the app keeps working
     without a token configured.
     """
+    from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
+
     if not HUGGINGFACE_API_TOKEN:
         raise RuntimeError(
             "HUGGINGFACE_API_TOKEN is not set -- news sentiment analysis needs it. "
@@ -94,25 +95,12 @@ def get_chat_model() -> ChatModel:
 
 
 def _extract_headline(news_item: dict[str, Any]) -> str | None:
-    """Pull a title out of one yfinance news item.
-
-    The original code assumed a flat `news['title']` shape. Left as the
-    primary lookup (matches the original, unverified against a live
-    `yf.Ticker.get_news()` call in this sandbox -- no network access to
-    Yahoo Finance here), with a fallback to a `news['content']['title']`
-    shape some yfinance versions have used, so an item in either shape is
-    picked up rather than silently skipped. Anything matching neither is
-    skipped rather than raising, since a malformed single headline
-    shouldn't drop the whole ticker from analysis.
-    """
-    if not isinstance(news_item, dict):
-        return None
-    if isinstance(news_item.get("title"), str):
-        return news_item["title"]
-    content = news_item.get("content")
-    if isinstance(content, dict) and isinstance(content.get("title"), str):
-        return content["title"]
-    return None
+    """Re-exported from `data/transforms/news_headlines.py` (moved there so
+    `market_conditions.py`'s headline digest can reuse the same parsing
+    without the data layer importing from the dashboard layer) -- kept as
+    a thin alias here under its original name so nothing else in this
+    module or its tests needs to change."""
+    return extract_headline_title(news_item)
 
 
 def extract_headlines(news_items: list[dict[str, Any]]) -> list[str]:

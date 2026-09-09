@@ -29,6 +29,16 @@ ASSET_CLASS_TICKERS: dict[str, dict[str, str]] = {
     "fx": {
         "EURUSD=X": "EuroUSD_fx",
     },
+    # Treasury yield curve. yfinance exposes these as regular index tickers
+    # (same fetch path as everything else above -- no new client needed),
+    # unlike genuine economic release data (CPI, JOLTS, payrolls, etc.),
+    # which yfinance doesn't have at all -- see data/clients/fred_client.py.
+    "rate": {
+        "^IRX": "US13W_Yield",
+        "^FVX": "US5Y_Yield",
+        "^TNX": "US10Y_Yield",
+        "^TYX": "US30Y_Yield",
+    },
 }
 
 

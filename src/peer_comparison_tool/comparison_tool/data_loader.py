@@ -40,6 +40,7 @@ from src.peer_comparison_tool.data.models import (
     BalanceSheetData,
     CashflowStatementData,
     CompanyInfo,
+    EconomicReleaseData,
     IndustryMetricsYoY,
     IndustryTimeSeries,
     IndustryTimeSeriesYoY,
@@ -109,6 +110,7 @@ class DashboardData:
     qfin_data: pd.DataFrame
     bs_data: pd.DataFrame
     cashflow_map: dict[str, pd.DataFrame]
+    economic_release_data: pd.DataFrame
 
 
 def load_dashboard_data(repo: Repository) -> DashboardData:
@@ -137,6 +139,11 @@ def load_dashboard_data(repo: Repository) -> DashboardData:
 
     cashflow_map = _load_cashflow_map(repo)
 
+    # Empty (rather than absent) if no FRED_API_KEY was set at pipeline
+    # time and this table was never populated -- see pipeline.py's
+    # ingest_economic_releases; the page handles an empty frame gracefully.
+    economic_release_data = repo.fetch_dataframe(EconomicReleaseData)
+
     return DashboardData(
         company_info=company_info,
         economic_data=economic_data,
@@ -149,6 +156,7 @@ def load_dashboard_data(repo: Repository) -> DashboardData:
         qfin_data=qfin_data,
         bs_data=bs_data,
         cashflow_map=cashflow_map,
+        economic_release_data=economic_release_data,
     )
 
 
