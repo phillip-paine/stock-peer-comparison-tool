@@ -115,7 +115,7 @@ def create_app() -> dash.Dash:
         elif pathname == "/bad-news-screener":
             return get_bad_news_screener_page_layout()
         elif pathname == "/valuation-dispersion-screener":
-            return get_valuation_dispersion_page_layout()
+            return get_valuation_dispersion_page_layout(data.snapshot_recent_metrics)
         elif pathname == "/report-comparison":
             return get_report_comparison_page_layout(data.company_info)
         elif pathname == "/market-conditions":
@@ -136,8 +136,8 @@ def create_app() -> dash.Dash:
         ],
     )
     def navigate(
-        n_clicks_comparison, n_clicks_quarterly, n_clicks_balance_sheet, n_clicks_company_overview,
-        n_clicks_company_dcf, n_clicks_winners_and_losers, n_clicks_agent_chat,
+            n_clicks_comparison, n_clicks_quarterly, n_clicks_balance_sheet, n_clicks_company_overview,
+            n_clicks_company_dcf, n_clicks_winners_and_losers, n_clicks_agent_chat,
     ):
         ctx = dash.callback_context
         if not ctx.triggered:

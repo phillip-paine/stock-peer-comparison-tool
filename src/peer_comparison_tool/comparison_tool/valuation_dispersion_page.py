@@ -15,6 +15,14 @@ Two-step UI, same shape as the other screener pages:
    against a quality z-score (ROE, margin, leverage), and classifies every
    ticker -- flagged ones drive the summary table, and the full set
    (flagged and not) drives the quadrant map below it.
+   An optional sector / sub-industry filter (multi-select, searchable, same
+   cascade as `comparison_page.py`) narrows what's *displayed*. It does NOT
+   change what's *scored*: z-scores are always computed against each
+   ticker's full peer group, then the table and quadrant map are filtered.
+   Filtering before scoring would silently change the peer-group mean/std
+   (most visibly under the DBSCAN grouping, where a cluster spans several
+   sectors), so the same ticker would get a different z-score depending on
+   which sectors happened to be ticked.
 2. Inspect: clicking a row shows the ticker's own metric values against
    its peer group's median, so the "why" behind the z-score is visible,
    not just the number.
@@ -85,9 +93,51 @@ DETAIL_METRIC_LABELS = {
     "profit_margin": "Profit margin",
     "debt_to_equity_ratio": "Debt-to-equity ratio",
 }
+SECTOR_COL = "sector"
+SUB_INDUSTRY_COL = "sub_industry"
 
 
-def get_valuation_dispersion_page_layout() -> html.Div:
+def _to_options(values) -> list[dict]:
+    """Sorted, de-duplicated dropdown options; NaN/blank values dropped so
+    they don't render as a literal "nan" entry."""
+    clean = sorted({v for v in values if isinstance(v, str) and v.strip()})
+    return [{"label": v, "value": v} for v in clean]
+
+
+def _sector_options(snapshot: pd.DataFrame) -> list[dict]:
+    if SECTOR_COL not in snapshot.columns:
+        return []
+    return _to_options(snapshot[SECTOR_COL].unique())
+
+
+def _sub_industry_options(snapshot: pd.DataFrame, sectors: list[str] | None) -> list[dict]:
+    """Sub-industries within the selected sectors, or all of them when no
+    sector is selected (an empty sector selection means \"no filter\" here,
+    since this screener covers the whole tracked universe by default)."""
+    if SUB_INDUSTRY_COL not in snapshot.columns:
+        return []
+    frame = snapshot
+    if sectors and SECTOR_COL in snapshot.columns:
+        frame = snapshot[snapshot[SECTOR_COL].isin(sectors)]
+    return _to_options(frame[SUB_INDUSTRY_COL].unique())
+
+
+def _filter_by_selection(
+        df: pd.DataFrame, sectors: list[str] | None, sub_industries: list[str] | None
+) -> pd.DataFrame:
+    """Rows matching the selected sectors AND sub-industries; an empty
+    selection on either dropdown means \"don't filter on that\". Returns a
+    copy so callers can't mutate the shared snapshot frame."""
+    mask = pd.Series(True, index=df.index)
+    if sectors and SECTOR_COL in df.columns:
+        mask &= df[SECTOR_COL].isin(sectors)
+    if sub_industries and SUB_INDUSTRY_COL in df.columns:
+        mask &= df[SUB_INDUSTRY_COL].isin(sub_industries)
+    return df[mask].copy()
+
+
+def get_valuation_dispersion_page_layout(snapshot_recent_metrics: pd.DataFrame | None = None) -> html.Div:
+    snapshot = snapshot_recent_metrics if snapshot_recent_metrics is not None else pd.DataFrame()
     return dbc.Container([
         dbc.Row([
             dbc.Col(
@@ -108,6 +158,33 @@ def get_valuation_dispersion_page_layout() -> html.Div:
                 ), width=12,
             )
         ),
+
+        dbc.Row([
+            dbc.Col([
+                html.Label("Filter by GICS Sector:", style={"color": colors["text"]}),
+                dcc.Dropdown(
+                    id="valdisp-sector-dropdown",
+                    options=_sector_options(snapshot),
+                    value=[],
+                    multi=True,
+                    searchable=True,
+                    placeholder="All sectors",
+                    style={"marginBottom": "15px"},
+                ),
+            ], width=4),
+            dbc.Col([
+                html.Label("Filter by GICS Sub-industry:", style={"color": colors["text"]}),
+                dcc.Dropdown(
+                    id="valdisp-sub-sector-dropdown",
+                    options=_sub_industry_options(snapshot, None),
+                    value=[],
+                    multi=True,
+                    searchable=True,
+                    placeholder="All sub-industries",
+                    style={"marginBottom": "15px"},
+                ),
+            ], width=5),
+        ]),
 
         dbc.Row([
             dbc.Col([
@@ -186,6 +263,20 @@ def register_valuation_dispersion_callback(app: dash.Dash, snapshot_recent_metri
     last_results_by_ticker: dict[str, dict] = {}
 
     @app.callback(
+        [Output("valdisp-sub-sector-dropdown", "options"), Output("valdisp-sub-sector-dropdown", "value")],
+        [Input("valdisp-sector-dropdown", "value")],
+        [State("valdisp-sub-sector-dropdown", "value")],
+    )
+    def update_sub_sector_options(selected_sectors, selected_sub_sectors):
+        # Cascade: sub-industry options follow the sector selection, and any
+        # already-ticked sub-industry that no longer belongs to a selected
+        # sector is dropped so it can't silently filter to nothing.
+        options = _sub_industry_options(snapshot_recent_metrics, selected_sectors)
+        valid = {o["value"] for o in options}
+        kept = [v for v in (selected_sub_sectors or []) if v in valid]
+        return options, kept
+
+    @app.callback(
         [
             Output("valdisp-summary-table", "data"),
             Output("valdisp-screen-status", "children"),
@@ -197,9 +288,12 @@ def register_valuation_dispersion_callback(app: dash.Dash, snapshot_recent_metri
             State("valdisp-min-group-size", "value"),
             State("valdisp-cheap-threshold", "value"),
             State("valdisp-expensive-threshold", "value"),
+            State("valdisp-sector-dropdown", "value"),
+            State("valdisp-sub-sector-dropdown", "value"),
         ],
     )
-    def run_screen(n_clicks, group_col, min_group_size, cheap_threshold, expensive_threshold):
+    def run_screen(n_clicks, group_col, min_group_size, cheap_threshold, expensive_threshold,
+                   selected_sectors, selected_sub_sectors):
         empty_fig = _empty_quadrant_figure()
         if not n_clicks:
             return [], "Click \"Run Screen\" to screen all tracked tickers against their peers.", empty_fig
@@ -218,6 +312,13 @@ def register_valuation_dispersion_callback(app: dash.Dash, snapshot_recent_metri
         )
         if scored.empty:
             return [], "No data available to screen.", empty_fig
+
+        # Filter *after* scoring so z-scores stay relative to each ticker's
+        # full peer group (see module docstring).
+        filter_active = bool(selected_sectors or selected_sub_sectors)
+        scored = _filter_by_selection(scored, selected_sectors, selected_sub_sectors)
+        if scored.empty:
+            return [], "No tickers match the selected sector / sub-industry.", empty_fig
 
         # Points with no valuation z-score at all (peer group too thin for
         # every metric) can't be placed on the map -- drop just those from
@@ -238,6 +339,9 @@ def register_valuation_dispersion_callback(app: dash.Dash, snapshot_recent_metri
         else:
             n_groups = snapshot_recent_metrics[group_col].nunique()
             status = f"Screened {len(snapshot_recent_metrics)} tickers across {n_groups} peer groups: {len(results_records)} flagged."
+            if filter_active:
+                status = (f"Scored all {len(snapshot_recent_metrics)} tickers across {n_groups} peer groups; "
+                          f"showing {len(scored)} in the selected sectors/sub-industries: {len(results_records)} flagged.")
 
         rows = [_format_summary_row(r, group_col) for r in results_records]
         return rows, status, fig
@@ -262,7 +366,7 @@ def register_valuation_dispersion_callback(app: dash.Dash, snapshot_recent_metri
 def _empty_quadrant_figure() -> "px.scatter":
     fig = px.scatter(title="Run the screen to plot tickers")
     fig.update_layout(plot_bgcolor=colors["background"], paper_bgcolor=colors["background"],
-                       font_color=colors["text"], margin=dict(l=20, r=20, t=30, b=20))
+                      font_color=colors["text"], margin=dict(l=20, r=20, t=30, b=20))
     return fig
 
 
@@ -319,7 +423,7 @@ def _build_quadrant_figure(scored: pd.DataFrame, group_col: str, cheap_threshold
     ]
     for text, x, y, xanchor, yanchor in quadrant_labels:
         fig.add_annotation(text=text, xref="paper", yref="paper", x=x, y=y, xanchor=xanchor, yanchor=yanchor,
-                            showarrow=False, font=dict(size=11, color=colors["text"]), opacity=0.6)
+                           showarrow=False, font=dict(size=11, color=colors["text"]), opacity=0.6)
 
     fig.update_layout(
         plot_bgcolor=colors["background"], paper_bgcolor=colors["background"], font_color=colors["text"],
@@ -355,7 +459,7 @@ def _build_detail_layout(result: dict) -> html.Div:
             continue
         zscore_text = "n/a (excluded/insufficient peers)" if pd.isna(zscore) else f"{zscore:+.2f}σ vs peers"
         metric_rows.append(html.Li(f"{DETAIL_METRIC_LABELS.get(metric, metric)}: {value:.2f} ({zscore_text})",
-                                    style={"color": colors["text"]}))
+                                   style={"color": colors["text"]}))
 
     return dbc.Card([
         dbc.CardHeader(f"{ticker} vs {peer_group_name}",

@@ -75,7 +75,15 @@ class Repository:
 
         table = model.__table__
         pk_cols = [c.name for c in inspect(model).primary_key]
-        stmt = sqlite_insert(table).values(cleaned)
+        # No `.values(cleaned)` here: that would inline every row into ONE
+        # multi-row INSERT whose bound-parameter count grows with the batch
+        # (rows x columns), and SQLite rejects a statement with more than
+        # SQLITE_MAX_VARIABLE_NUMBER parameters (999 on old builds, 32766 on
+        # stock 3.32+, 250000 on Debian/Ubuntu) with "too many SQL
+        # variables". Passing the records as the execute() parameter list
+        # instead runs it as an executemany: one small statement, many
+        # parameter sets, so batch size no longer matters.
+        stmt = sqlite_insert(table)
 
         update_cols = {c.name: stmt.excluded[c.name] for c in table.columns if c.name not in pk_cols}
 
@@ -93,7 +101,7 @@ class Repository:
         else:
             raise ValueError(f"Unknown upsert mode: {mode!r}")
 
-        self._session.execute(stmt)
+        self._session.execute(stmt, cleaned)
         return len(cleaned)
 
     def upsert_dataframe(
