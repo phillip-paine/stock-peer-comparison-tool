@@ -158,7 +158,7 @@ def register_landing_page_data_callbacks(app, data):
             etf_line_price, etf_line_price_yoy, fx_line_price, fx_line_price_yoy
 
     def create_asset_line_chart(asset, series):
-        plot_data = data[data['AssetClass'] == asset]
+        plot_data = data[data['asset_class'] == asset]
         if series.endswith('yoy'):
             plot_data = plot_data.dropna(subset=[series])
 

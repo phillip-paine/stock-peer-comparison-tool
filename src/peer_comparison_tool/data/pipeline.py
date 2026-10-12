@@ -50,7 +50,7 @@ from .models import (
 )
 from .repository import Repository
 from .transforms.asset_classes import transform_asset_class_series
-from .transforms.economic_releases import FRED_SERIES
+from .transforms.economic_releases import DEFAULT_HISTORY_LIMIT, SERIES_CATALOG
 from .transforms.ticker_financials import (
     transform_balance_sheet,
     transform_cashflow,
@@ -266,20 +266,27 @@ def ingest_economic_releases(
         series_ids: List[str] | None = None,
         max_age_days: int | None = None,
 ) -> List[str]:
-    """Fetch/persist the latest observations for every FRED series in
-    `series_ids` (defaults to `FRED_SERIES`, the starter list -- CPI,
-    JOLTS, payrolls, unemployment, Fed funds), skipping series already
-    fetched recently. Returns the series actually (re)fetched.
+    """Fetch/persist observations for every FRED series in `series_ids`
+    (defaults to the whole `SERIES_CATALOG` -- rates & curve, FOMC
+    projections, labor, inflation), skipping series already fetched
+    recently. Returns the series actually (re)fetched.
 
-    No transform step of its own (unlike `ingest_asset_classes`): FRED
-    already returns clean `(date, value)` observations, there's no
-    equivalent of yfinance's messy multi-symbol column shape to tidy up
-    here. `economic_releases.build_release_summary` does the
-    latest-vs-prior comparison work, on the dashboard side, from whatever
-    this has persisted.
+    Each series is fetched with its own history depth
+    (`SeriesSpec.history_limit`): ~2 years of daily observations for the
+    yield/rate charts, ~3 years of monthly for latest-vs-prior and
+    year-on-year. Series outside the catalog get `DEFAULT_HISTORY_LIMIT`.
+
+    Written with `mode="replace"`, not "ignore": FRED revises history
+    (payrolls and JOLTS for months after first print; the FOMC rewrites its
+    projections every Summary of Economic Projections), and an insert-once
+    table would keep the stale first print forever.
+
+    No transform step of its own: FRED already returns clean `(date, value)`
+    observations. The latest-vs-prior / year-on-year / projection work
+    happens on the dashboard side, in `transforms/economic_releases.py`.
     """
     max_age_days = settings.fred_recency_days if max_age_days is None else max_age_days
-    series_ids = list(FRED_SERIES.keys()) if series_ids is None else series_ids
+    series_ids = list(SERIES_CATALOG) if series_ids is None else series_ids
 
     stale_series = [s for s in series_ids if not repo.is_data_recent(s, max_age_days=max_age_days)]
     if not stale_series:
@@ -287,8 +294,10 @@ def ingest_economic_releases(
 
     fetched = []
     for series_id in stale_series:
+        spec = SERIES_CATALOG.get(series_id)
+        limit = spec.history_limit if spec else DEFAULT_HISTORY_LIMIT
         try:
-            observations = client.fetch_series_observations(series_id)
+            observations = client.fetch_series_observations(series_id, limit=limit)
         except DataRetrievalError as exc:
             logger.warning("Skipping FRED series %s: %s", series_id, exc)
             continue
@@ -297,8 +306,17 @@ def ingest_economic_releases(
 
         tidy = observations.copy()
         tidy["series_id"] = series_id
-        repo.upsert_dataframe(EconomicReleaseData, tidy, mode="ignore")
+        repo.upsert_dataframe(EconomicReleaseData, tidy, mode="replace")
         fetched.append(series_id)
+
+    if not fetched:
+        # Every series failing at once is almost always the key (mistyped, not
+        # yet activated), not many unrelated outages -- say so once, loudly.
+        logger.error(
+            "No FRED series could be fetched (%d attempted). Check that FRED_API_KEY is set to a valid, "
+            "activated key and that api.stlouisfed.org is reachable; see the warnings above for FRED's "
+            "own error message.", len(stale_series),
+        )
 
     repo.record_fetch(fetched)
     return fetched

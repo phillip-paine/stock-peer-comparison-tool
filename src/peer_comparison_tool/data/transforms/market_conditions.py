@@ -15,6 +15,8 @@ from typing import Any
 
 import pandas as pd
 
+from ..constants import asset_name_to_class
+
 # Trading-day lookback windows, not calendar days -- consistent with how
 # price history is treated everywhere else in this codebase (e.g.
 # `compute_yoy_by_date`'s exact-calendar-date matching is the one deliberate
@@ -39,6 +41,12 @@ def compute_asset_moves(
     if asset_class_time_series.empty:
         return []
 
+    # Rows ingested before the one-time `AssetClass` backfill have NULL
+    # asset_class; fall back to the class declared in `constants` so the
+    # table still groups sensibly rather than showing "None" (or crashing
+    # the page's sort, which can't compare None with str).
+    known_classes = asset_name_to_class()
+
     rows = []
     for ticker, group in asset_class_time_series.groupby("ticker"):
         g = group.sort_values("date")
@@ -47,10 +55,13 @@ def compute_asset_moves(
             continue
 
         latest_price = close.iloc[-1]
+        stated_class = g["asset_class"].dropna()
         row: dict[str, Any] = {
             "ticker": ticker,
-            "asset_class": g["asset_class"].iloc[-1],
-            "latest_date": g["date"].iloc[-1],
+            "asset_class": stated_class.iloc[-1] if not stated_class.empty else known_classes.get(ticker, "Unknown"),
+            # Date of the price actually reported -- not of a trailing row
+            # whose close was NaN (which `close` has already dropped).
+            "latest_date": g.loc[close.index[-1], "date"],
             "latest_price": latest_price,
         }
         for label, n in windows.items():

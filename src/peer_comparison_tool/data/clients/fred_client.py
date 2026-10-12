@@ -22,6 +22,7 @@ whole client library for.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from typing import Callable, TypeVar
 
@@ -42,17 +43,59 @@ FRED_BASE_URL = "https://api.stlouisfed.org/fred/series/observations"
 _MISSING_VALUE_MARKER = "."
 
 
+class FredRequestError(Exception):
+    """A FRED request failed. The message is already scrubbed of the API key
+    (see `_redact`): `requests` embeds the full request URL, `api_key=...`
+    included, in its own exception messages, and those must never be logged
+    or chained into a traceback that might get pasted into a bug report.
+
+    `retryable` is False for HTTP 4xx other than 429 (a bad key or mistyped
+    series ID can't be fixed by retrying), so a wrong key fails fast instead
+    of burning the whole backoff schedule once per series.
+    """
+
+    def __init__(self, message: str, *, retryable: bool = True):
+        super().__init__(message)
+        self.retryable = retryable
+
+
+_API_KEY_IN_URL = re.compile(r"(api_key=)[^&\s'\")]+")
+
+
+def _redact(text: str, api_key: str | None) -> str:
+    """Remove the API key from `text`, as a literal value and as an
+    `api_key=` query parameter."""
+    if api_key:
+        text = text.replace(api_key, "***")
+    return _API_KEY_IN_URL.sub(r"\1***", text)
+
+
 def _with_retry(fn: Callable[[], T], *, retries: int, backoff_seconds: float, description: str) -> T:
     last_exc: Exception | None = None
+    attempts_made = 0
     for attempt in range(1, retries + 1):
+        attempts_made = attempt
         try:
             return fn()
         except Exception as exc:  # requests surfaces a mix of connection/HTTP/JSON errors, not one common type
             last_exc = exc
             logger.warning("FRED call failed for %s (attempt %d/%d): %s", description, attempt, retries, exc)
+            if not getattr(exc, "retryable", True):
+                break
             if attempt < retries:
                 time.sleep(backoff_seconds * attempt)
-    raise DataRetrievalError(f"FRED call failed for {description!r} after {retries} attempts") from last_exc
+    attempts = f"{attempts_made} attempt{'s' if attempts_made != 1 else ''}"
+    raise DataRetrievalError(f"FRED call failed for {description!r} after {attempts}: {last_exc}") from last_exc
+
+
+def _fred_error_detail(response: requests.Response) -> str:
+    """FRED's own explanation (`error_message` in its JSON body), e.g.
+    "api_key is not registered", so a bad key is diagnosable from the log."""
+    try:
+        detail = response.json().get("error_message")
+    except Exception:
+        detail = None
+    return detail or (response.text or "").strip()[:200] or "no detail returned"
 
 
 class FredClient:
@@ -83,15 +126,23 @@ class FredClient:
             )
 
         def _call() -> dict:
-            response = requests.get(
-                FRED_BASE_URL,
-                params={
-                    "series_id": series_id, "api_key": self._api_key, "file_type": "json",
-                    "sort_order": "desc", "limit": limit,
-                },
-                timeout=10,
-            )
-            response.raise_for_status()
+            try:
+                response = requests.get(
+                    FRED_BASE_URL,
+                    params={
+                        "series_id": series_id, "api_key": self._api_key, "file_type": "json",
+                        "sort_order": "desc", "limit": limit,
+                    },
+                    timeout=10,
+                )
+            except requests.RequestException as exc:
+                # `from None`: the original message carries the request URL (and key).
+                raise FredRequestError(_redact(f"{type(exc).__name__}: {exc}", self._api_key)) from None
+
+            if response.status_code >= 400:
+                detail = _redact(_fred_error_detail(response), self._api_key)
+                retryable = response.status_code == 429 or response.status_code >= 500
+                raise FredRequestError(f"HTTP {response.status_code}: {detail}", retryable=retryable)
             return response.json()
 
         payload = self._retry(_call, f"{series_id} observations")

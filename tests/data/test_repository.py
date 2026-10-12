@@ -7,10 +7,12 @@ import pandas as pd
 import pytest
 
 from peer_comparison_tool.data.models import (
+    AssetClassTimeSeries,
     CompanyInfo,
     DataStorageRecord,
     TickerMostRecentMetric,
     TickerTimeSeries,
+    TickerTimeSeriesYoY,
 )
 from peer_comparison_tool.data.repository import Repository
 
@@ -70,6 +72,56 @@ class TestUpsert:
 
         df = repo.fetch_dataframe(TickerTimeSeries)
         assert pd.isna(df.iloc[0]["close_price"])
+
+    @pytest.mark.parametrize("mode", ["ignore", "replace"])
+    def test_upsert_large_batch_stays_under_sqlite_variable_limit(self, session, mode):
+        """Regression: `upsert()` used to build ONE multi-row INSERT for the
+        whole batch, so bound parameters scaled with row count. A year of
+        daily YoY rows across the full ticker universe (~63k rows x 4 cols,
+        ~250k parameters) hit SQLite's `too many SQL variables` limit
+        (SQLITE_MAX_VARIABLE_NUMBER: 999 on old builds, 32766 on stock
+        3.32+, 250000 on Debian/Ubuntu builds). Earlier tests only used a
+        handful of rows, so it never surfaced until real data.
+
+        Asserts on the size of each executed statement rather than on
+        whether this machine's SQLite happens to raise, so the test fails
+        the same way on every build."""
+        from sqlalchemy import event
+
+        _make_company(session)
+        repo = Repository(session)
+        start = date(2020, 1, 1)
+        n_rows = 20_000  # x 4 columns = 80k parameters if sent as one statement
+        records = [
+            {"ticker": "AAPL", "date": start + timedelta(days=i),
+             "close_price_yoy": float(i), "close_price_indexed_yoy": float(i)}
+            for i in range(n_rows)
+        ]
+
+        params_per_statement: list[int] = []
+
+        def _record(conn, cursor, statement, parameters, context, executemany):
+            if "ticker_ts_yoy" in statement and statement.lstrip().upper().startswith("INSERT"):
+                params_per_statement.append(len(parameters[0]) if executemany else len(parameters))
+
+        engine = session.get_bind()
+        event.listen(engine, "before_cursor_execute", _record)
+        try:
+            assert repo.upsert(TickerTimeSeriesYoY, records, mode=mode) == n_rows
+            assert session.query(TickerTimeSeriesYoY).count() == n_rows
+
+            changed = [{**r, "close_price_yoy": -1.0} for r in records]
+            repo.upsert(TickerTimeSeriesYoY, changed, mode=mode)
+        finally:
+            event.remove(engine, "before_cursor_execute", _record)
+
+        assert params_per_statement, "expected INSERT statements to be captured"
+        assert max(params_per_statement) <= 999, (
+            f"a single statement bound {max(params_per_statement)} parameters; SQLite's limit is as low as 999"
+        )
+        assert session.query(TickerTimeSeriesYoY).count() == n_rows
+        sample = session.get(TickerTimeSeriesYoY, ("AAPL", start + timedelta(days=n_rows - 1)))
+        assert sample.close_price_yoy == (-1.0 if mode == "replace" else float(n_rows - 1))
 
     def test_upsert_empty_records_is_a_noop(self, session):
         repo = Repository(session)
@@ -165,6 +217,35 @@ class TestFetchDataframe:
         df = repo.fetch_dataframe(TickerTimeSeries, since=date(2026, 3, 1))
         assert len(df) == 1
         assert str(df.iloc[0]["date"]) == "2026-06-01"
+
+    def test_returns_orm_attribute_names_not_db_column_names(self, session):
+        """Regression: `AssetClassTimeSeries.asset_class` is stored in a DB
+        column named "AssetClass". `fetch_dataframe` used to hand back the DB
+        name, so a frame written with `upsert_dataframe` (attribute names in)
+        came back with a different spelling (DB names out) -- the Market
+        Conditions page's `g["asset_class"]` raised KeyError. Reads now mirror
+        writes: attribute names both ways."""
+        repo = Repository(session)
+        repo.upsert_dataframe(AssetClassTimeSeries, pd.DataFrame([{
+            "ticker": "Gold", "date": date(2026, 1, 1), "asset_class": "commodity",
+            "close_price": 2000.0, "close_price_indexed": 100.0, "close_price_yoy": 1.0,
+        }]))
+        session.commit()
+
+        df = repo.fetch_dataframe(AssetClassTimeSeries)
+        assert "asset_class" in df.columns
+        assert "AssetClass" not in df.columns
+        assert df.iloc[0]["asset_class"] == "commodity"
+
+    def test_attribute_name_filter_matches_returned_column_name(self, session):
+        repo = Repository(session)
+        repo.upsert_dataframe(AssetClassTimeSeries, pd.DataFrame([
+            {"ticker": "Gold", "date": date(2026, 1, 1), "asset_class": "commodity", "close_price": 1.0},
+            {"ticker": "EURUSD", "date": date(2026, 1, 1), "asset_class": "fx", "close_price": 1.0},
+        ]))
+        session.commit()
+        df = repo.fetch_dataframe(AssetClassTimeSeries, asset_class="fx")
+        assert list(df["ticker"]) == ["EURUSD"]
 
     def test_since_is_ignored_for_models_without_a_date_column(self, session):
         repo = Repository(session)

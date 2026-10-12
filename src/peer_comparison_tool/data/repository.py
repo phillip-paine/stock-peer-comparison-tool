@@ -204,7 +204,19 @@ class Repository:
         # in the same uncommitted transaction — needed when several
         # refresh_*() calls run back-to-back inside one session_scope(),
         # as aggregations.run_all() does.
-        return pd.read_sql(stmt, self._session.connection())
+        df = pd.read_sql(stmt, self._session.connection())
+        # Return ORM *attribute* names, mirroring `upsert_dataframe` (which
+        # takes them). They only differ where a column was declared with an
+        # explicit DB name -- today just `AssetClassTimeSeries.asset_class`,
+        # stored as "AssetClass". Without this, a frame written with one
+        # spelling comes back with the other, and anything keyed on the
+        # attribute name (e.g. the Market Conditions transform) hits KeyError.
+        db_to_attr = {
+            prop.columns[0].name: prop.key
+            for prop in inspect(model).column_attrs
+            if prop.columns[0].name != prop.key
+        }
+        return df.rename(columns=db_to_attr) if db_to_attr else df
 
     def latest_cluster_membership(self) -> pd.DataFrame:
         """Most recent DBSCAN cluster-membership row per ticker.
