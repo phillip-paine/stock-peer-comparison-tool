@@ -229,3 +229,85 @@ class DataStorageRecord(Base):
 
     ticker: Mapped[str] = mapped_column(primary_key=True)
     version_date: Mapped[date] = mapped_column("version_date", primary_key=True)
+
+
+# ---------------------------------------------------------------------------
+# Portfolio tracking (user-entered data -- not produced by the pipeline)
+# ---------------------------------------------------------------------------
+
+class PortfolioHolding(Base):
+    """One purchase lot in the user's portfolio.
+
+    Several lots of the same ticker are separate rows (different purchase
+    date/price/FX), which is what makes cost basis and P&L exact.
+
+    `purchase_price` is per share in the position's own `currency`;
+    `purchase_fx_rate` is USD per 1 unit of that currency on the purchase
+    date (1.0 for USD), frozen at entry so USD cost basis includes the FX
+    move since purchase. `price_source` is "auto" (priced from the stored
+    market series) or "manual" (priced from `ManualPrice` -- for positions
+    the pipeline can't see, e.g. CAD-hedged funds).
+
+    `ticker` is deliberately not a foreign key: manual-priced positions
+    usually aren't in `company_info`.
+    """
+
+    __tablename__ = "portfolio_holding"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ticker: Mapped[str]
+    name: Mapped[str | None]
+    asset_class: Mapped[str]
+    sector: Mapped[str | None]
+    currency: Mapped[str]
+    price_source: Mapped[str]
+    shares: Mapped[float]
+    purchase_price: Mapped[float]
+    purchase_date: Mapped[date]
+    purchase_fx_rate: Mapped[float]
+
+
+class ManualPrice(Base):
+    """Hand-entered price mark for a manually priced position. One row per
+    (ticker, as-of date); entering a price for an existing date replaces it.
+    `price` is per share in `currency` (which must match the holding's
+    currency -- enforced at entry in `transforms/portfolio.py`)."""
+
+    __tablename__ = "manual_price"
+
+    ticker: Mapped[str] = mapped_column(primary_key=True)
+    as_of_date: Mapped[date] = mapped_column(primary_key=True)
+    price: Mapped[float]
+    currency: Mapped[str]
+
+
+class ManualFxRate(Base):
+    """Hand-entered FX override: USD per 1 unit of `currency` on `as_of_date`.
+    The portfolio uses it in preference to the pipeline's series whenever it
+    is at least as recent (see `transforms/portfolio.resolve_current_fx`)."""
+
+    __tablename__ = "manual_fx_rate"
+
+    currency: Mapped[str] = mapped_column(primary_key=True)
+    as_of_date: Mapped[date] = mapped_column(primary_key=True)
+    rate: Mapped[float]
+
+
+class PortfolioDividend(Base):
+    """A cash dividend / distribution the user received, entered by hand.
+
+    `amount` is the total cash received (not per share) in `currency`, which
+    is the currency of the ticker's holding; `fx_rate` is USD per 1 unit of
+    that currency on `pay_date` (1.0 for USD), frozen at entry. It is income:
+    it counts towards total value and total return but is not reinvested.
+    `ticker` is not a foreign key for the same reason as `PortfolioHolding`.
+    """
+
+    __tablename__ = "portfolio_dividend"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ticker: Mapped[str]
+    pay_date: Mapped[date]
+    amount: Mapped[float]
+    currency: Mapped[str]
+    fx_rate: Mapped[float]

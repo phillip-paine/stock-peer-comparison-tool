@@ -50,6 +50,7 @@ def get_landing_page_layout_v2(economic_data: pd.DataFrame):
                         dbc.NavLink("Valuation Dispersion Screener", href="/valuation-dispersion-screener", active="exact"),
                         dbc.NavLink("Report Comparison", href="/report-comparison", active="exact"),
                         dbc.NavLink("Market Conditions", href="/market-conditions", active="exact"),
+                        dbc.NavLink("Portfolio", href="/portfolio", active="exact"),
                     ],
                     vertical=True,
                     pills=True,

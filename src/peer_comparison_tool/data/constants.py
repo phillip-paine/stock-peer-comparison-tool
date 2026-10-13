@@ -28,6 +28,9 @@ ASSET_CLASS_TICKERS: dict[str, dict[str, str]] = {
     },
     "fx": {
         "EURUSD=X": "EuroUSD_fx",
+        # USD per 1 CAD -- the rate the portfolio page uses to express CAD
+        # positions in USD (see data/transforms/portfolio.FX_SERIES_BY_CURRENCY).
+        "CADUSD=X": "CADUSD_fx",
     },
     # Treasury yield curve. yfinance exposes these as regular index tickers
     # (same fetch path as everything else above -- no new client needed),
