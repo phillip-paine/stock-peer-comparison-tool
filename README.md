@@ -44,3 +44,37 @@ A number of popular and commonly used trading strategies are implemented to iden
 The idea is that cointegrated assets can be used to find long/short positions if a significant deviation is observed in the recent price movements of the spread $asset_1 + b asset_2$.
 
 - Discounted Cash Flow fundamental analysis 
+
+## MCP server (read-only data access for AI models)
+
+`src/peer_comparison_tool/mcp_server/` exposes the curated database to an MCP client (Claude Desktop, Claude Code, ...)
+over **local stdio**. It is read-only by construction: the SQLite file is opened with `mode=ro`, nothing imports the
+pipeline or yfinance, and there is no free-form SQL tool. It reads the same database the pipeline writes
+(`PCT_DATABASE_URL` / `PCT_DATA_DIR`), so a pipeline refresh is visible on the next call.
+
+Tools: `data_freshness`, `list_sectors`, `list_companies`, `company_profile`, `price_history`, `asset_moves`,
+`quarterly_financials`, `balance_sheet`, `cash_flow`, `peer_valuation`, `valuation_clusters`. Every response carries a
+`notes` list with units and caveats (e.g. quarterly margins are percent, valuation-snapshot margins are fractions).
+Portfolio and economic-release (FRED) data are deliberately not exposed yet.
+
+```bash
+poetry add fastmcp                                  # one-off; not part of the dashboard's dependencies until you run this
+PYTHONPATH=src python -m peer_comparison_tool.mcp_server
+```
+
+Client config (Claude Desktop `claude_desktop_config.json` / Claude Code `.mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "peer-comparison-tool": {
+      "command": "poetry",
+      "args": ["--directory", "/ABSOLUTE/PATH/TO/peer-comparison-tool", "run", "python", "-m", "peer_comparison_tool.mcp_server"],
+      "env": {"PYTHONPATH": "src"}
+    }
+  }
+}
+```
+
+stdout is the protocol channel: logs go to stderr, and nothing in the package may `print()`.
+Tests: `PYTHONPATH=.:src pytest tests/mcp_server` (the server tests skip themselves if `fastmcp` isn't installed).
